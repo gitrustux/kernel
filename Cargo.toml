@@ -1,0 +1,61 @@
+[package]
+name = "rustix"
+version = "0.1.0"
+edition = "2021"
+authors = ["Antonio Castillo <lacrimatus@gmail.com>"]
+description = "A secure, high-performance microkernel written in Rust."
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/lacrimatus/rustux"
+readme = "README.md"
+build = "build.rs"
+
+# Define the crate type as a binary (for the kernel)
+[[bin]]
+name = "rustux"
+path = "src/main.rs"
+
+# Build dependencies
+[build-dependencies]
+cc = "1.0"
+
+# Dependencies
+[dependencies]
+# Panic handler
+panic-halt = "1.0.0"
+
+# Spinlocks for kernel synchronization
+spin = "0.9.0"
+
+# Bit manipulation utilities
+bitflags = "2.0.0"
+
+# Procedural macros
+rustux_macros = { path = "rustux_macros" }
+
+# Logging library for kernel debugging
+log = { version = "0.4.0", default-features = false, optional = true }
+
+# Architecture-specific dependencies
+[target.'cfg(target_arch = "x86_64")'.dependencies]
+x86_64 = "0.14.10"
+
+[target.'cfg(target_arch = "aarch64")'.dependencies]
+aarch64-cpu = "10.0.0"
+
+# Build configurations
+[profile.dev]
+panic = "abort"
+opt-level = 1
+
+[profile.release]
+panic = "abort"
+opt-level = 3
+lto = true
+codegen-units = 1
+
+# Features for conditional compilation
+[features]
+default = ["log"]
+x86_64 = []
+aarch64 = []
+logging = ["log"]
