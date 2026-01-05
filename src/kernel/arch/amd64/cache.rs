@@ -14,10 +14,6 @@
 use crate::kernel::arch::amd64::feature;
 use crate::rustux::types::*;
 
-/// X86 feature flags
-const X86_FEATURE_CLFLUSH: u64 = 1 << 19;
-const X86_FEATURE_CLFLUSHOPT: u64 = 1 << 23;
-
 /// Get data cache line size
 ///
 /// # Returns
@@ -52,12 +48,11 @@ pub fn arch_sync_cache_range(start: VAddr, len: usize) {
     // Invoke cpuid to act as a serializing instruction
     // This ensures we see modifications to the instruction stream
     // See Intel Volume 3, 8.1.3 "Handling Self- and Cross-Modifying Code"
-    let mut v: u32;
     unsafe {
         #[cfg(target_arch = "x86_64")]
         {
-            let (_a, _b, _c, d): (u32, u32, u32, u32) = core::arch::x86_64::__cpuid(0);
-            v = d;
+            let result = core::arch::x86_64::__cpuid(0);
+            let v = result.edx;
             let _ = v; // Prevent unused warning
         }
 
@@ -65,7 +60,6 @@ pub fn arch_sync_cache_range(start: VAddr, len: usize) {
         {
             // For other architectures, use a compiler barrier
             core::hint::black_box(());
-            v = 0;
         }
     }
 }
@@ -99,7 +93,7 @@ pub fn arch_clean_cache_range(start: VAddr, len: usize) {
 /// * `len` - Length of the range in bytes
 pub fn arch_clean_invalidate_cache_range(start: VAddr, len: usize) {
     // Check if CLFLUSH is available
-    if !unsafe { feature::x86_feature_test(X86_FEATURE_CLFLUSH) } {
+    if !unsafe { feature::x86_feature_clflush() } {
         unsafe {
             // Fall back to WBINVD (write-back and invalidate)
             core::arch::asm!("wbinvd");
@@ -113,7 +107,7 @@ pub fn arch_clean_invalidate_cache_range(start: VAddr, len: usize) {
     let mut ptr = start & !(clsize - 1); // ROUNDDOWN(start, clsize)
 
     // Check if CLFLUSHOPT is available
-    let use_opt = unsafe { feature::x86_feature_test(X86_FEATURE_CLFLUSHOPT) };
+    let use_opt = unsafe { feature::x86_feature_clflushopt() };
 
     while ptr < end {
         unsafe {

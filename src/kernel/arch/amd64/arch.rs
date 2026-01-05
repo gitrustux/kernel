@@ -363,7 +363,7 @@ pub fn platform_irq(frame: *mut amd64::X86Iframe) {
 /// # Safety
 ///
 /// Must only be called from exception context
-pub unsafe fn x86_uspace_exception_return() -> ! {
+pub unsafe fn x86_uspace_exception_return(_iframe: *mut ()) -> ! {
     // TODO: Implement proper exception return
     loop {
         core::hint::spin_loop();

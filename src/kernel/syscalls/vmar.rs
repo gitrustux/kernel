@@ -428,7 +428,7 @@ impl Vmar {
         }
 
         // Page-align size
-        let aligned_size = (size + PAGE_SIZE - 1) & !(PAGE_SIZE - 1);
+        let aligned_size = (size + PAGE_SIZE as u64 - 1) & !(PAGE_SIZE as u64 - 1);
 
         // Find or validate offset
         let offset = if options & vmar_options::SPECIFIC != 0 {
@@ -487,7 +487,7 @@ impl Vmar {
         let vaddr = (self.base + offset) as usize;
 
         // Actually map the pages into the address space
-        let page_count = ((size + PAGE_SIZE - 1) / PAGE_SIZE) as usize;
+        let page_count = ((size + PAGE_SIZE as u64 - 1) / PAGE_SIZE as u64) as usize;
 
         // For each page in the mapping
         for i in 0..page_count {

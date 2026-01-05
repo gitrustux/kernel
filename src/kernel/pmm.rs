@@ -150,7 +150,7 @@ impl ArenaInfo {
 
     /// Get the end physical address (exclusive)
     pub fn end(&self) -> PAddr {
-        self.base + self.size
+        self.base + self.size as PAddr
     }
 }
 

@@ -65,7 +65,7 @@ pub const VMM_PF_FLAG_NOT_PRESENT: u32 = 1 << 3;
 
 /// Check if the exception came from user mode
 fn is_from_user(frame: &X86Iframe) -> bool {
-    descriptor::SELECTOR_PL(frame.user_cs) != 0
+    descriptor::SELECTOR_PL(frame.user_cs as u16) != 0
 }
 
 /// Dump the fault frame for debugging
@@ -180,7 +180,7 @@ fn x86_pfe_handler(frame: &mut X86Iframe, error_code: u64) -> core::result::Resu
     let supervisor_access = error_code & PFEX_U == 0;
     let page_present = error_code & PFEX_P != 0;
     let ac_clear = (frame.rflags & X86_FLAGS_AC) == 0;
-    let smap_enabled = feature::x86_feature_test(feature::X86_FEATURE_SMAP);
+    let smap_enabled = unsafe { feature::x86_feature_smap() };
     let user_addr = crate::kernel::arch::amd64::arch::is_user_address(va);
 
     if supervisor_access && page_present && smap_enabled && ac_clear && user_addr {

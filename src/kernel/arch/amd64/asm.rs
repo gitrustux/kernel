@@ -85,7 +85,7 @@ pub unsafe extern "C" fn x86_64_context_switch(oldsp: *mut u64, newsp: u64) {
 /// lock must point to valid memory
 pub unsafe fn arch_spin_lock(lock: *mut u64) {
     // Get current CPU number and add 1
-    let cpu_num = mp::x86_get_cpuid() + 1;
+    let cpu_num = (mp::x86_get_cpuid() + 1) as u64;
 
     loop {
         // Try to acquire the lock using cmpxchg
@@ -120,7 +120,7 @@ pub unsafe fn arch_spin_lock(lock: *mut u64) {
 ///
 /// lock must point to valid memory
 pub unsafe fn arch_spin_trylock(lock: *mut u64) -> bool {
-    let cpu_num = mp::x86_get_cpuid() + 1;
+    let cpu_num = (mp::x86_get_cpuid() + 1) as u64;
     let prev = _cmpxchg64_rel(lock, cpu_num, 0);
 
     prev == 0

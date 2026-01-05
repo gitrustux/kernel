@@ -32,6 +32,7 @@ pub mod dev;
 //
 // Note: This is a minimal module declaration to allow building.
 // The full module structure needs to be completed.
+pub mod allocator;
 pub mod cmdline;
 pub mod debug;
 pub mod dpc;
@@ -54,6 +55,9 @@ pub mod vm;
 ///
 /// This is the main initialization function called from kmain().
 pub fn init() {
+    // Initialize the heap allocator first
+    allocator::init();
+
     // Early initialization
     arch::arch_early_init();
 

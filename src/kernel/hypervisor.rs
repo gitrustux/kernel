@@ -12,6 +12,7 @@
 
 use alloc::collections::BTreeMap;
 use alloc::sync::Arc;
+use core::convert::TryFrom;
 use core::sync::atomic::{AtomicU64, Ordering};
 use crate::kernel::sync::spin::SpinMutex;
 use crate::rustux::types::*;
@@ -81,29 +82,30 @@ pub struct IdAllocator<T, const N: usize>
 where
     T: Copy + Clone + PartialEq,
 {
-    next_id: SpinMutex<T>,
-    max_id: T,
+    next_id: SpinMutex<u64>,
+    max_id: u64,
     bitmap: SpinMutex<[u64; N]>,
+    _phantom: core::marker::PhantomData<T>,
 }
 
 impl<T, const N: usize> IdAllocator<T, N>
 where
-    T: Copy + Clone + PartialEq + From<u64>,
-    u64: From<T>,
+    T: Copy + Clone + PartialEq + TryFrom<u64>,
 {
     pub fn new() -> Self {
         Self {
-            next_id: SpinMutex::new(T::from(1)),
-            max_id: T::from((N * 64) as u64),
+            next_id: SpinMutex::new(1),
+            max_id: (N * 64) as u64,
             bitmap: SpinMutex::new([0u64; N]),
+            _phantom: core::marker::PhantomData,
         }
     }
 
     pub fn alloc(&self) -> Result<T> {
         let mut next_id = self.next_id.lock();
         let id = *next_id;
-        *next_id = T::from(u64::from(*next_id) + 1);
-        Ok(id)
+        *next_id = id + 1;
+        T::try_from(id).map_err(|_| err(ERR_OUT_OF_RANGE, "ID overflow"))
     }
 
     pub fn free(&self, _id: T) -> Result<()> {
@@ -113,8 +115,7 @@ where
 
 impl<T, const N: usize> Default for IdAllocator<T, N>
 where
-    T: Copy + Clone + PartialEq + From<u64> + Default,
-    u64: From<T>,
+    T: Copy + Clone + PartialEq + TryFrom<u64>,
 {
     fn default() -> Self {
         Self::new()

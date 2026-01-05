@@ -201,8 +201,8 @@ pub const PCIE_INVALID_VENDOR_ID: u16 = 0xFFFF;
 pub const PCIE_CAPABILITY_ALIGNMENT: u8 = 4;
 
 /// Maximum number of standard capabilities
-pub const PCIE_MAX_CAPABILITIES: u8 = (PCIE_BASE_CONFIG_SIZE - PCIE_STANDARD_CONFIG_HDR_SIZE)
-    / PCIE_CAPABILITY_ALIGNMENT;
+pub const PCIE_MAX_CAPABILITIES: u8 = ((PCIE_BASE_CONFIG_SIZE - PCIE_STANDARD_CONFIG_HDR_SIZE)
+    / PCIE_CAPABILITY_ALIGNMENT as u16) as u8;
 
 /// Null capability pointer
 pub const PCIE_CAP_PTR_NULL: u8 = 0;
@@ -211,7 +211,7 @@ pub const PCIE_CAP_PTR_NULL: u8 = 0;
 pub const PCIE_CAP_PTR_MIN_VALID: u8 = PCIE_STANDARD_CONFIG_HDR_SIZE;
 
 /// Maximum valid capability pointer
-pub const PCIE_CAP_PTR_MAX_VALID: u8 = PCIE_BASE_CONFIG_SIZE - PCIE_CAPABILITY_ALIGNMENT;
+pub const PCIE_CAP_PTR_MAX_VALID: u8 = (PCIE_BASE_CONFIG_SIZE - PCIE_CAPABILITY_ALIGNMENT as u16) as u8;
 
 /// Capability pointer alignment
 pub const PCIE_CAP_PTR_ALIGNMENT: u8 = 2;
@@ -223,7 +223,7 @@ pub const PCIE_EXT_CAP_PTR_NULL: u16 = 0;
 pub const PCIE_EXT_CAP_PTR_MIN_VALID: u16 = PCIE_BASE_CONFIG_SIZE as u16;
 
 /// Maximum valid extended capability pointer
-pub const PCIE_EXT_CAP_PTR_MAX_VALID: u16 = PCIE_EXTENDED_CONFIG_SIZE - PCIE_CAPABILITY_ALIGNMENT as u16;
+pub const PCIE_EXT_CAP_PTR_MAX_VALID: u16 = PCIE_EXTENDED_CONFIG_SIZE - (PCIE_CAPABILITY_ALIGNMENT as u16);
 
 /// Extended capability pointer alignment
 pub const PCIE_EXT_CAP_PTR_ALIGNMENT: u16 = 4;

@@ -134,3 +134,60 @@ pub fn g_x86_feature_fsgsbase() -> bool {
     // Check CPUID leaf 7, subleaf 0, EBX bit 0
     x86_feature_test(7, 0, 1, 0)
 }
+
+/// Check if SMAP is available
+///
+/// # Returns
+///
+/// true if Supervisor Mode Access Prevention is available
+pub fn x86_feature_smap() -> bool {
+    // Check CPUID leaf 7, subleaf 0, ECX bit 20
+    x86_feature_test(7, 0, 2, 20)
+}
+
+/// Check if SMEP is available
+///
+/// # Returns
+///
+/// true if Supervisor Mode Execution Protection is available
+pub fn x86_feature_smep() -> bool {
+    // Check CPUID leaf 7, subleaf 0, EBX bit 7
+    x86_feature_test(7, 0, 1, 7)
+}
+
+/// Check if CLFLUSH is available
+///
+/// # Returns
+///
+/// true if CLFLUSH instruction is available
+pub fn x86_feature_clflush() -> bool {
+    // Check CPUID leaf 1, EDX bit 19
+    x86_feature_test(1, 0, 3, 19)
+}
+
+/// Check if CLFLUSHOPT is available
+///
+/// # Returns
+///
+/// true if CLFLUSHOPT instruction is available
+pub fn x86_feature_clflushopt() -> bool {
+    // Check CPUID leaf 7, subleaf 0, EBX bit 23
+    x86_feature_test(7, 0, 1, 23)
+}
+
+/// X86 feature constants for convenience functions
+pub const FEAT_CLFLUSH: u32 = 0;
+pub const FEAT_CLFLUSHOPT: u32 = 1;
+pub const FEAT_SMAP: u32 = 2;
+pub const FEAT_SMEP: u32 = 3;
+
+/// Test a feature by convenience constant
+pub fn x86_has_feature(feature: u32) -> bool {
+    match feature {
+        FEAT_CLFLUSH => x86_feature_clflush(),
+        FEAT_CLFLUSHOPT => x86_feature_clflushopt(),
+        FEAT_SMAP => x86_feature_smap(),
+        FEAT_SMEP => x86_feature_smep(),
+        _ => false,
+    }
+}
