@@ -36,12 +36,13 @@ use crate::kernel::pmm;
 use crate::kernel::thread;
 use crate::kernel::sched;
 use crate::kernel::syscalls;
+use crate::kernel::usercopy;
 use crate::kernel::percpu;
 use crate::kernel::cmdline;
 use crate::kernel::debug;
 
 // Import logging macros
-use crate::{log_debug, log_info};
+use crate::{log_debug, log_info, log_error};
 
 /// ============================================================================
 /// Initialization State
@@ -211,6 +212,12 @@ fn init_memory() {
     vm::init();
     log_info!("Virtual memory subsystem initialized");
 
+    // Initialize kernel stack allocator
+    unsafe {
+        vm::stacks::init_stacks();
+    }
+    log_info!("Kernel stack allocator initialized");
+
     unsafe {
         INIT_STATE = InitState::VM;
     }
@@ -250,7 +257,7 @@ fn init_late() {
     log_info!("Syscall layer initialized");
 
     // User/kernel boundary safety
-    // crate::kernel::usercopy::init();
+    usercopy::init();
     log_info!("User/kernel boundary safety initialized");
 
     unsafe {
@@ -270,12 +277,40 @@ pub fn kernel_running() {
 
     log_info!("Kernel is now running");
 
-    // Start the idle thread for CPU 0
-    // In a real implementation, this would create and start idle threads
-    // for each CPU in the system.
+    // Create idle thread for CPU 0
+    // In a full implementation, we would create idle threads for all CPUs
+    match thread::Thread::new_kernel(idle_thread_entry, 0, thread::PRIORITY_IDLE) {
+        Ok(idle_thread) => {
+            log_info!("Created idle thread for CPU 0: tid={}", idle_thread.tid());
+            idle_thread.start().ok();
+            // Register thread in global registry
+            thread::register_thread(alloc::sync::Arc::new(idle_thread));
+        }
+        Err(e) => {
+            log_error!("Failed to create idle thread: {:?}", e);
+        }
+    }
 
     log_info!("Starting scheduler...");
     // The scheduler would now take over and start scheduling threads
+}
+
+/// Idle thread entry point
+///
+/// This is the entry point for idle threads.
+/// When there's no work to do, the idle thread runs.
+extern "C" fn idle_thread_entry(_cpu_id: usize) -> ! {
+    log_info!("Idle thread started for CPU {}", _cpu_id);
+
+    loop {
+        // In a real implementation, this would:
+        // 1. Check for pending work
+        // 2. If no work, halt the CPU until interrupt
+        // 3. Repeat
+
+        // For now, just spin
+        core::hint::spin_loop();
+    }
 }
 
 /// ============================================================================

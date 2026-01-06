@@ -153,9 +153,9 @@ pub fn sys_vmo_create_contiguous_impl(
 
     // For now, return a stub handle
     let vmo_handle = 1000u32;
-    let user_ptr = UserPtr::<u32>::new(vmo_out);
+    let user_ptr = UserPtr::<u8>::new(vmo_out);
     unsafe {
-        if let Err(err) = copy_to_user(user_ptr, &vmo_handle as *const u32, 1) {
+        if let Err(err) = copy_to_user(user_ptr, &vmo_handle as *const u32 as *const u8, 4) {
             log_error!("sys_vmo_create_contiguous: copy_to_user failed: {:?}", err);
             return err_to_ret(err.into());
         }
@@ -201,9 +201,9 @@ pub fn sys_vmo_create_physical_impl(
 
     // For now, return a stub handle
     let vmo_handle = 1001u32;
-    let user_ptr = UserPtr::<u32>::new(vmo_out);
+    let user_ptr = UserPtr::<u8>::new(vmo_out);
     unsafe {
-        if let Err(err) = copy_to_user(user_ptr, &vmo_handle as *const u32, 1) {
+        if let Err(err) = copy_to_user(user_ptr, &vmo_handle as *const u32 as *const u8, 4) {
             log_error!("sys_vmo_create_physical: copy_to_user failed: {:?}", err);
             return err_to_ret(err.into());
         }
@@ -343,9 +343,9 @@ pub fn sys_iommu_create_impl(
 
     // For now, return a stub handle
     let iommu_handle = 2000u32;
-    let user_ptr = UserPtr::<u32>::new(iommu_out);
+    let user_ptr = UserPtr::<u8>::new(iommu_out);
     unsafe {
-        if let Err(err) = copy_to_user(user_ptr, &iommu_handle as *const u32, 1) {
+        if let Err(err) = copy_to_user(user_ptr, &iommu_handle as *const u32 as *const u8, 4) {
             log_error!("sys_iommu_create: copy_to_user failed: {:?}", err);
             return err_to_ret(err.into());
         }
@@ -464,9 +464,9 @@ pub fn sys_bti_create_impl(
 
     // For now, return a stub handle
     let bti_handle = 3000u32;
-    let user_ptr = UserPtr::<u32>::new(bti_out);
+    let user_ptr = UserPtr::<u8>::new(bti_out);
     unsafe {
-        if let Err(err) = copy_to_user(user_ptr, &bti_handle as *const u32, 1) {
+        if let Err(err) = copy_to_user(user_ptr, &bti_handle as *const u32 as *const u8, 4) {
             log_error!("sys_bti_create: copy_to_user failed: {:?}", err);
             return err_to_ret(err.into());
         }
@@ -619,9 +619,9 @@ pub fn sys_interrupt_create_impl(
 
     // For now, return a stub handle
     let irq_handle = 4000u32;
-    let user_ptr = UserPtr::<u32>::new(handle_out);
+    let user_ptr = UserPtr::<u8>::new(handle_out);
     unsafe {
-        if let Err(err) = copy_to_user(user_ptr, &irq_handle as *const u32, 1) {
+        if let Err(err) = copy_to_user(user_ptr, &irq_handle as *const u32 as *const u8, 4) {
             log_error!("sys_interrupt_create: copy_to_user failed: {:?}", err);
             return err_to_ret(err.into());
         }

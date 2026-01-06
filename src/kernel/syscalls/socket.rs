@@ -287,7 +287,7 @@ impl SocketRegistry {
 }
 
 /// Global socket registry
-static SOCKET_REGISTRY: SocketRegistry = SocketRegistry::new();
+static mut SOCKET_REGISTRY: SocketRegistry = SocketRegistry::new();
 
 /// ============================================================================
 /// Socket ID Allocation
@@ -342,20 +342,22 @@ pub fn sys_socket_create_impl(
     socket1.peer_id.store(id0, Ordering::Relaxed);
 
     // Insert into socket registry
-    if let Err(err) = SOCKET_REGISTRY.insert(id0, socket0.clone()) {
-        log_error!("sys_socket_create: failed to insert socket0: {:?}", err);
-        return err_to_ret(err);
-    }
+    unsafe {
+        if let Err(err) = SOCKET_REGISTRY.insert(id0, socket0.clone()) {
+            log_error!("sys_socket_create: failed to insert socket0: {:?}", err);
+            return err_to_ret(err);
+        }
 
-    if let Err(err) = SOCKET_REGISTRY.insert(id1, socket1.clone()) {
-        log_error!("sys_socket_create: failed to insert socket1: {:?}", err);
-        SOCKET_REGISTRY.remove(id0);
-        return err_to_ret(err);
+        if let Err(err) = SOCKET_REGISTRY.insert(id1, socket1.clone()) {
+            log_error!("sys_socket_create: failed to insert socket1: {:?}", err);
+            SOCKET_REGISTRY.remove(id0);
+            return err_to_ret(err);
+        }
     }
 
     // Write handles to user space
     if handle0_out != 0 {
-        let user_ptr = UserPtr::<u64>::new(handle0_out);
+        let user_ptr = UserPtr::<u8>::new(handle0_out);
         unsafe {
             if let Err(err) = copy_to_user(user_ptr, &id0 as *const u64 as *const u8, 8) {
                 log_error!("sys_socket_create: copy_to_user failed for handle0: {:?}", err);
@@ -367,7 +369,7 @@ pub fn sys_socket_create_impl(
     }
 
     if handle1_out != 0 {
-        let user_ptr = UserPtr::<u64>::new(handle1_out);
+        let user_ptr = UserPtr::<u8>::new(handle1_out);
         unsafe {
             if let Err(err) = copy_to_user(user_ptr, &id1 as *const u64 as *const u8, 8) {
                 log_error!("sys_socket_create: copy_to_user failed for handle1: {:?}", err);
@@ -420,11 +422,13 @@ pub fn sys_socket_write_impl(
 
     // Look up socket
     let socket_id = handle_val as u64;
-    let socket = match SOCKET_REGISTRY.get(socket_id) {
-        Some(s) => s,
-        None => {
-            log_error!("sys_socket_write: socket not found");
-            return err_to_ret(RX_ERR_BAD_HANDLE);
+    let socket = unsafe {
+        match SOCKET_REGISTRY.get(socket_id) {
+            Some(s) => s,
+            None => {
+                log_error!("sys_socket_write: socket not found");
+                return err_to_ret(RX_ERR_BAD_HANDLE);
+            }
         }
     };
 
@@ -442,10 +446,23 @@ pub fn sys_socket_write_impl(
 
     // Write to socket
     let actual = match options {
-        socket_options::NONE => socket.write(&buf)?,
+        socket_options::NONE => {
+            match socket.write(&buf) {
+                Ok(n) => n,
+                Err(err) => {
+                    log_error!("sys_socket_write: write failed: {:?}", err);
+                    return err_to_ret(RX_ERR_INTERNAL);
+                }
+            }
+        }
         socket_options::CONTROL => {
-            socket.write_control(&buf)?;
-            size
+            match socket.write_control(&buf) {
+                Ok(_) => size,
+                Err(err) => {
+                    log_error!("sys_socket_write: write_control failed: {:?}", err);
+                    return err_to_ret(RX_ERR_INTERNAL);
+                }
+            }
         }
         _ => {
             log_error!("sys_socket_write: invalid options {:#x}", options);
@@ -455,11 +472,11 @@ pub fn sys_socket_write_impl(
 
     // Write actual count to user
     if actual_out != 0 {
-        let user_ptr = UserPtr::<usize>::new(actual_out);
+        let user_ptr = UserPtr::<u8>::new(actual_out);
         unsafe {
             if let Err(err) = copy_to_user(
                 user_ptr,
-                &actual as *const usize as *const u8,
+                &actual as *const _ as *const u8,
                 core::mem::size_of::<usize>(),
             ) {
                 log_error!("sys_socket_write: copy_to_user failed: {:?}", err);
@@ -510,11 +527,13 @@ pub fn sys_socket_read_impl(
 
     // Look up socket
     let socket_id = handle_val as u64;
-    let socket = match SOCKET_REGISTRY.get(socket_id) {
-        Some(s) => s,
-        None => {
-            log_error!("sys_socket_read: socket not found");
-            return err_to_ret(RX_ERR_BAD_HANDLE);
+    let socket = unsafe {
+        match SOCKET_REGISTRY.get(socket_id) {
+            Some(s) => s,
+            None => {
+                log_error!("sys_socket_read: socket not found");
+                return err_to_ret(RX_ERR_BAD_HANDLE);
+            }
         }
     };
 
@@ -523,8 +542,24 @@ pub fn sys_socket_read_impl(
 
     // Read from socket
     let actual = match options {
-        socket_options::NONE => socket.read(&mut buf)?,
-        socket_options::CONTROL => socket.read_control(&mut buf)?,
+        socket_options::NONE => {
+            match socket.read(&mut buf) {
+                Ok(n) => n,
+                Err(err) => {
+                    log_error!("sys_socket_read: read failed: {:?}", err);
+                    return err_to_ret(RX_ERR_INTERNAL);
+                }
+            }
+        }
+        socket_options::CONTROL => {
+            match socket.read_control(&mut buf) {
+                Ok(n) => n,
+                Err(err) => {
+                    log_error!("sys_socket_read: read_control failed: {:?}", err);
+                    return err_to_ret(RX_ERR_INTERNAL);
+                }
+            }
+        }
         _ => {
             log_error!("sys_socket_read: invalid options {:#x}", options);
             return err_to_ret(RX_ERR_INVALID_ARGS);
@@ -544,11 +579,11 @@ pub fn sys_socket_read_impl(
 
     // Write actual count to user
     if actual_out != 0 {
-        let user_ptr = UserPtr::<usize>::new(actual_out);
+        let user_ptr = UserPtr::<u8>::new(actual_out);
         unsafe {
             if let Err(err) = copy_to_user(
                 user_ptr,
-                &actual as *const usize as *const u8,
+                &actual as *const _ as *const u8,
                 core::mem::size_of::<usize>(),
             ) {
                 log_error!("sys_socket_read: copy_to_user failed: {:?}", err);
@@ -585,22 +620,30 @@ pub fn sys_socket_share_impl(handle_val: u32, socket_to_share: u32) -> SyscallRe
 
     // Look up socket
     let socket_id = handle_val as u64;
-    let socket = match SOCKET_REGISTRY.get(socket_id) {
-        Some(s) => s,
-        None => {
-            log_error!("sys_socket_share: socket not found");
-            return err_to_ret(RX_ERR_BAD_HANDLE);
+    let socket = unsafe {
+        match SOCKET_REGISTRY.get(socket_id) {
+            Some(s) => s,
+            None => {
+                log_error!("sys_socket_share: socket not found");
+                return err_to_ret(RX_ERR_BAD_HANDLE);
+            }
         }
     };
 
     // Validate socket to share
     let share_id = socket_to_share as u64;
-    if !SOCKET_REGISTRY.get(share_id).is_some() {
+    if unsafe { !SOCKET_REGISTRY.get(share_id).is_some() } {
         return err_to_ret(RX_ERR_BAD_HANDLE);
     }
 
     // Share the socket
-    socket.share(share_id)?;
+    match socket.share(share_id) {
+        Ok(_) => {}
+        Err(err) => {
+            log_error!("sys_socket_share: share failed: {:?}", err);
+            return err_to_ret(RX_ERR_INTERNAL);
+        }
+    }
 
     log_debug!("sys_socket_share: success");
 
@@ -627,20 +670,28 @@ pub fn sys_socket_accept_impl(handle_val: u32, handle_out: usize) -> SyscallRet 
 
     // Look up socket
     let socket_id = handle_val as u64;
-    let socket = match SOCKET_REGISTRY.get(socket_id) {
-        Some(s) => s,
-        None => {
-            log_error!("sys_socket_accept: socket not found");
-            return err_to_ret(RX_ERR_BAD_HANDLE);
+    let socket = unsafe {
+        match SOCKET_REGISTRY.get(socket_id) {
+            Some(s) => s,
+            None => {
+                log_error!("sys_socket_accept: socket not found");
+                return err_to_ret(RX_ERR_BAD_HANDLE);
+            }
         }
     };
 
     // Accept shared socket
-    let accepted_id = socket.accept()?;
+    let accepted_id = match socket.accept() {
+        Ok(id) => id,
+        Err(err) => {
+            log_error!("sys_socket_accept: accept failed: {:?}", err);
+            return err_to_ret(RX_ERR_INTERNAL);
+        }
+    };
 
     // Write handle to user
     if handle_out != 0 {
-        let user_ptr = UserPtr::<u64>::new(handle_out);
+        let user_ptr = UserPtr::<u8>::new(handle_out);
         unsafe {
             if let Err(err) = copy_to_user(user_ptr, &accepted_id as *const u64 as *const u8, 8) {
                 log_error!("sys_socket_accept: copy_to_user failed: {:?}", err);
@@ -683,16 +734,24 @@ pub fn sys_socket_shutdown_impl(handle_val: u32, options: u32) -> SyscallRet {
 
     // Look up socket
     let socket_id = handle_val as u64;
-    let socket = match SOCKET_REGISTRY.get(socket_id) {
-        Some(s) => s,
-        None => {
-            log_error!("sys_socket_shutdown: socket not found");
-            return err_to_ret(RX_ERR_BAD_HANDLE);
+    let socket = unsafe {
+        match SOCKET_REGISTRY.get(socket_id) {
+            Some(s) => s,
+            None => {
+                log_error!("sys_socket_shutdown: socket not found");
+                return err_to_ret(RX_ERR_BAD_HANDLE);
+            }
         }
     };
 
     // Shutdown socket
-    socket.shutdown(options)?;
+    match socket.shutdown(options) {
+        Ok(_) => {}
+        Err(err) => {
+            log_error!("sys_socket_shutdown: shutdown failed: {:?}", err);
+            return err_to_ret(RX_ERR_INTERNAL);
+        }
+    }
 
     log_debug!("sys_socket_shutdown: success");
 
@@ -706,7 +765,7 @@ pub fn sys_socket_shutdown_impl(handle_val: u32, options: u32) -> SyscallRet {
 /// Get socket subsystem statistics
 pub fn get_stats() -> SocketStats {
     SocketStats {
-        total_sockets: SOCKET_REGISTRY.count(),
+        total_sockets: unsafe { SOCKET_REGISTRY.count() },
         total_bytes_sent: 0, // TODO: Track bytes sent
         total_bytes_received: 0, // TODO: Track bytes received
     }

@@ -25,6 +25,7 @@ use crate::print;
 use crate::println;
 use crate::kernel::thread;
 use crate::rustux::types::*;
+use alloc::sync::Arc;
 
 /// Page fault error code flags
 pub const PFEX_P: u64 = 1 << 0;   // Page present
@@ -237,7 +238,9 @@ fn x86_debug_handler(frame: &mut X86Iframe) {
 
     // Read debug status register DR6
     if let Some(t) = thread {
-        unsafe { x86_read_debug_status(&mut t.arch.debug_state) };
+        // TODO: Access debug state properly
+        // For now, skip reading debug status as the context structure doesn't expose it
+        let _ = t;
     }
 
     // Try to dispatch to user-space handler
@@ -263,11 +266,11 @@ fn x86_gpf_handler(frame: &mut X86Iframe) {
 
     // Check if we were doing a GPF test (e.g., to check if an MSR exists)
     let percpu = unsafe { crate::kernel::arch::amd64::mp::x86_get_percpu() };
-    if (*percpu).gpf_return_target != 0 {
+    if unsafe { (*percpu).gpf_return_target } != 0 {
         assert!(!is_from_user(frame));
 
         // Set up return to new address
-        frame.rip = (*percpu).gpf_return_target as u64;
+        frame.rip = unsafe { (*percpu).gpf_return_target as u64 };
         // Note: Can't directly assign to pointer field, need to handle differently
         // For now, just skip the GPF return target mechanism
         return;

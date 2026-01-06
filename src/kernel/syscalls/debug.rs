@@ -101,7 +101,7 @@ pub fn sys_debug_read_impl(handle: u32, buffer: usize, len: usize) -> SyscallRet
 
     // Get the requested length
     let mut read_len = 0;
-    let len_ptr = UserPtr::<usize>::new(len);
+    let len_ptr = UserPtr::<u8>::new(len);
     unsafe {
         if let Err(err) = copy_from_user(&mut read_len as *mut usize as *mut u8, len_ptr, 1) {
             log_error!("sys_debug_read: copy_from_user len failed: {:?}", err);
@@ -139,7 +139,7 @@ pub fn sys_debug_read_impl(handle: u32, buffer: usize, len: usize) -> SyscallRet
 
     // Write back actual length
     unsafe {
-        if let Err(err) = copy_to_user(len_ptr, &chars_read as *const usize, 1) {
+        if let Err(err) = copy_to_user(len_ptr, &(chars_read as usize) as *const usize as *const u8, 1) {
             log_error!("sys_debug_read: copy_to_user len failed: {:?}", err);
             return err_to_ret(err.into());
         }
@@ -309,9 +309,9 @@ pub fn sys_ktrace_read_impl(
 
     // For now, return zero bytes read
     let actual_len = 0usize;
-    let actual_ptr = UserPtr::<usize>::new(actual);
+    let actual_ptr = UserPtr::<u8>::new(actual);
     unsafe {
-        if let Err(err) = copy_to_user(actual_ptr, &actual_len as *const usize, 1) {
+        if let Err(err) = copy_to_user(actual_ptr, &actual_len as *const usize as *const u8, 1) {
             log_error!("sys_ktrace_read: copy_to_user actual failed: {:?}", err);
             return err_to_ret(err.into());
         }

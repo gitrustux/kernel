@@ -114,7 +114,7 @@ impl VmMapping {
             size,
             paddr_or_offset,
             prot,
-            pt_flags: PageTableFlags::from_prot(prot),
+            pt_flags: PageTableFlags::from_bits(PageTableFlags::from_prot(prot)),
             flags,
         }
     }
@@ -445,7 +445,7 @@ pub unsafe fn context_switch(from: Option<&AddressSpace>, to: Option<&AddressSpa
     {
         // x86_64 context switch - load CR3 with new page table
         if let Some(to_aspace) = to {
-            let cr3_value = to_aspace.root_phys();
+            let cr3_value = to_aspace.root_phys() as u64;
             unsafe {
                 crate::kernel::arch::amd64::mmu::write_cr3(cr3_value);
             }

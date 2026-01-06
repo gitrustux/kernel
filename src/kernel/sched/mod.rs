@@ -178,7 +178,7 @@ impl RunQueue {
     }
 
     /// Request preemption
-    pub fn request_preempt(&self) {
+    pub fn request_preempt(&mut self) {
         self.preempt_pending.store(true, Ordering::Relaxed);
         self.stats.preemptions += 1;
     }
@@ -216,6 +216,11 @@ impl RunQueue {
     /// Get statistics
     pub const fn stats(&self) -> &SchedulerStats {
         &self.stats
+    }
+
+    /// Get mutable statistics
+    pub fn stats_mut(&mut self) -> &mut SchedulerStats {
+        &mut self.stats
     }
 
     /// Convert priority (0-255) to queue index
@@ -333,7 +338,7 @@ impl Scheduler {
             idle
         } else {
             // No idle thread - return None (CPU idle)
-            self.runqueue.stats().idle_cycles += 1;
+            self.runqueue.stats_mut().idle_cycles += 1;
             return None;
         };
 
@@ -491,7 +496,7 @@ pub fn init_scheduler(cpu_id: u64) {
 
 /// Schedule the next thread
 pub fn schedule() -> Option<ThreadId> {
-    with_scheduler(|sched| sched.schedule())
+    with_scheduler_mut(|sched| sched.schedule())
 }
 
 /// Make a thread ready to run

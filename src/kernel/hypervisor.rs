@@ -105,7 +105,7 @@ where
         let mut next_id = self.next_id.lock();
         let id = *next_id;
         *next_id = id + 1;
-        T::try_from(id).map_err(|_| err(ERR_OUT_OF_RANGE, "ID overflow"))
+        T::try_from(id).map_err(|_| RX_ERR_OUT_OF_RANGE)
     }
 
     pub fn free(&self, _id: T) -> Result<()> {

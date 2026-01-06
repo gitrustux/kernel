@@ -32,7 +32,9 @@ use crate::kernel::vm::layout::VAddr;
 use crate::rustux::types::*;
 use crate::rustux::types::err::*;
 use alloc::collections::BTreeSet;
-use core::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use alloc::collections::VecDeque;
+use core::sync::atomic::{AtomicBool, AtomicUsize, AtomicU64, Ordering};
+use crate::kernel::sync::spin::SpinMutex;
 
 // Import logging macros
 use crate::{log_debug, log_info};
@@ -416,6 +418,262 @@ pub fn get_pager() -> Option<&'static DefaultPager> {
 pub fn handle_page_fault(vmo_id: u64, offset: usize, flags: PageFaultFlags) -> Result<Frame> {
     let pager = get_pager().ok_or(RX_ERR_BAD_STATE)?;
     pager.fault(vmo_id, offset, flags)
+}
+
+/// ============================================================================
+/// Page Eviction Policy
+/// ============================================================================
+
+/// Page eviction policy
+#[repr(u8)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EvictionPolicy {
+    /// No eviction (keep all pages)
+    None = 0,
+
+    /// Least Recently Used
+    LRU = 1,
+
+    /// Adaptive Replacement Cache
+    ARC = 2,
+
+    /// Clock algorithm (approximation of LRU)
+    Clock = 3,
+}
+
+/// Page access tracking entry
+#[derive(Debug, Clone)]
+struct PageAccess {
+    /// VMO ID
+    vmo_id: u64,
+
+    /// Page offset within VMO
+    offset: usize,
+
+    /// Physical address
+    paddr: PAddr,
+
+    /// Reference count
+    ref_count: u32,
+
+    /// Access time (for LRU)
+    access_time: u64,
+
+    /// Dirty flag (has been written to)
+    dirty: bool,
+
+    /// Reference flag (for clock algorithm)
+    referenced: bool,
+}
+
+impl PageAccess {
+    /// Create a new page access entry
+    fn new(vmo_id: u64, offset: usize, paddr: PAddr) -> Self {
+        Self {
+            vmo_id,
+            offset,
+            paddr,
+            ref_count: 1,
+            access_time: 0,
+            dirty: false,
+            referenced: true,
+        }
+    }
+}
+
+/// Page eviction tracker
+///
+/// Tracks page accesses for eviction policy
+pub struct PageEvictionTracker {
+    /// Eviction policy
+    policy: EvictionPolicy,
+
+    /// Page access tracking (ordered by access time for LRU)
+    pages: SpinMutex<alloc::collections::VecDeque<PageAccess>>,
+
+    /// Access counter (for timestamp)
+    access_counter: AtomicU64,
+
+    /// Total tracked pages
+    total_pages: AtomicUsize,
+}
+
+impl PageEvictionTracker {
+    /// Create a new page eviction tracker
+    pub fn new(policy: EvictionPolicy) -> Self {
+        Self {
+            policy,
+            pages: SpinMutex::new(alloc::collections::VecDeque::new()),
+            access_counter: AtomicU64::new(0),
+            total_pages: AtomicUsize::new(0),
+        }
+    }
+
+    /// Track a page access
+    ///
+    /// # Arguments
+    ///
+    /// * `vmo_id` - VMO containing the page
+    /// * `offset` - Offset within VMO
+    /// * `paddr` - Physical address of the page
+    pub fn track_page(&self, vmo_id: u64, offset: usize, paddr: PAddr) {
+        let access_time = self.access_counter.fetch_add(1, Ordering::Relaxed);
+        let mut pages = self.pages.lock();
+
+        // Check if page is already tracked
+        for page in pages.iter() {
+            if page.vmo_id == vmo_id && page.offset == offset {
+                // Update access time
+                return;
+            }
+        }
+
+        // Add new page to tracking
+        pages.push_back(PageAccess::new(vmo_id, offset, paddr));
+        self.total_pages.fetch_add(1, Ordering::Relaxed);
+    }
+
+    /// Record that a page was accessed
+    ///
+    /// # Arguments
+    ///
+    /// * `vmo_id` - VMO containing the page
+    /// * `offset` - Offset within VMO
+    pub fn record_access(&self, vmo_id: u64, offset: usize) {
+        let access_time = self.access_counter.fetch_add(1, Ordering::Relaxed);
+        let mut pages = self.pages.lock();
+
+        // Find and update the page
+        for page in pages.iter_mut() {
+            if page.vmo_id == vmo_id && page.offset == offset {
+                page.access_time = access_time;
+                page.referenced = true;
+                return;
+            }
+        }
+    }
+
+    /// Record that a page was modified
+    ///
+    /// # Arguments
+    ///
+    /// * `vmo_id` - VMO containing the page
+    /// * `offset` - Offset within VMO
+    pub fn record_dirty(&self, vmo_id: u64, offset: usize) {
+        let mut pages = self.pages.lock();
+
+        for page in pages.iter_mut() {
+            if page.vmo_id == vmo_id && page.offset == offset {
+                page.dirty = true;
+                return;
+            }
+        }
+    }
+
+    /// Stop tracking a page
+    ///
+    /// # Arguments
+    ///
+    /// * `vmo_id` - VMO containing the page
+    /// * `offset` - Offset within VMO
+    pub fn untrack_page(&self, vmo_id: u64, offset: usize) {
+        let mut pages = self.pages.lock();
+        pages.retain(|p| !(p.vmo_id == vmo_id && p.offset == offset));
+        self.total_pages.fetch_sub(1, Ordering::Relaxed);
+    }
+
+    /// Find a page to evict
+    ///
+    /// # Returns
+    ///
+    /// Physical address of a page that can be evicted, or None
+    pub fn find_eviction_candidate(&self) -> Option<(u64, usize, PAddr)> {
+        match self.policy {
+            EvictionPolicy::None => None,
+            EvictionPolicy::LRU => self.find_lru_victim(),
+            EvictionPolicy::ARC => self.find_arc_victim(),
+            EvictionPolicy::Clock => self.find_clock_victim(),
+        }
+    }
+
+    /// Find LRU victim (Least Recently Used)
+    fn find_lru_victim(&self) -> Option<(u64, usize, PAddr)> {
+        let pages = self.pages.lock();
+
+        // Find page with oldest access time that isn't dirty
+        let mut oldest = None;
+        let mut oldest_time = u64::MAX;
+
+        for page in pages.iter() {
+            // Skip dirty pages (need to write back)
+            if page.dirty {
+                continue;
+            }
+
+            if page.access_time < oldest_time {
+                oldest_time = page.access_time;
+                oldest = Some((page.vmo_id, page.offset, page.paddr));
+            }
+        }
+
+        oldest
+    }
+
+    /// Find ARC victim (Adaptive Replacement Cache)
+    fn find_arc_victim(&self) -> Option<(u64, usize, PAddr)> {
+        // Simplified ARC: prefer non-recently accessed pages
+        // Full ARC would maintain t1 (recency) and t2 (frequency) lists
+        self.find_lru_victim()
+    }
+
+    /// Find Clock algorithm victim
+    fn find_clock_victim(&self) -> Option<(u64, usize, PAddr)> {
+        let mut pages = self.pages.lock();
+
+        // Clock algorithm: circular scan looking for unreferenced page
+        for _ in 0..2 {
+            for page in pages.iter_mut() {
+                if page.dirty {
+                    continue; // Skip dirty pages
+                }
+
+                if !page.referenced {
+                    return Some((page.vmo_id, page.offset, page.paddr));
+                }
+
+                // Give page a second chance
+                page.referenced = false;
+            }
+        }
+
+        None
+    }
+
+    /// Get the number of tracked pages
+    pub fn page_count(&self) -> usize {
+        self.total_pages.load(Ordering::Relaxed)
+    }
+}
+
+/// Global page eviction tracker
+static mut GLOBAL_EVICTION_TRACKER: Option<PageEvictionTracker> = None;
+
+/// Initialize the page eviction tracker
+///
+/// # Arguments
+///
+/// * `policy` - Eviction policy to use
+pub fn init_eviction_tracker(policy: EvictionPolicy) {
+    unsafe {
+        GLOBAL_EVICTION_TRACKER = Some(PageEvictionTracker::new(policy));
+    }
+
+    log_info!("Page eviction tracker initialized with policy: {:?}", policy);
+}
+
+/// Get the global eviction tracker
+pub fn get_eviction_tracker() -> Option<&'static PageEvictionTracker> {
+    unsafe { GLOBAL_EVICTION_TRACKER.as_ref() }
 }
 
 /// ============================================================================

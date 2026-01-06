@@ -48,7 +48,7 @@ impl PcieAddr {
 
     /// Check if the address is valid
     pub fn is_valid(&self) -> bool {
-        self.bus < PCIE_MAX_BUSES
+        (self.bus as u16) < PCIE_MAX_BUSES
             && self.device < PCIE_MAX_DEVICES_PER_BUS
             && self.function < PCIE_MAX_FUNCTIONS_PER_DEVICE
             && self.offset < PCIE_EXTENDED_CONFIG_SIZE as u8

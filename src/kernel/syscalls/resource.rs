@@ -165,7 +165,7 @@ pub fn sys_resource_create_impl(
         }
 
         // Convert to string (simplified)
-        String::from_utf8_lossy(&name_buf).to_string()
+        String::from_utf8_lossy(&name_buf).into_owned()
     } else {
         String::from("resource")
     };

@@ -252,8 +252,8 @@ impl Arena {
     }
 
     /// Allocate a single page from this arena
-    fn alloc_page(&self) -> Option<PAddr> {
-        if let Some(bitmap) = self.bitmap {
+    fn alloc_page(&mut self) -> Option<PAddr> {
+        if let Some(bitmap) = &mut self.bitmap {
             for (i, &word) in bitmap.iter().enumerate() {
                 if word != !0u64 {
                     // Found a free bit (0 = free)
@@ -263,14 +263,15 @@ impl Arena {
                     if index < self.total_count as usize {
                         // Try to allocate using compare-and-swap
                         let mask = 1u64 << bit;
-                        let old = bitmap[i].fetch_or(mask, Ordering::Acquire);
+                        let atomic_word = unsafe { &*(bitmap[i] as *const u64 as *const core::sync::atomic::AtomicU64) };
+                        let old = atomic_word.fetch_or(mask, Ordering::Acquire);
 
                         if (old & mask) == 0 {
                             // Successfully allocated
                             self.free_count.fetch_sub(1, Ordering::Relaxed);
 
                             // Update page state
-                            if let Some(pages) = self.pages {
+                            if let Some(pages) = &mut self.pages {
                                 pages[index].state = PageState::Allocated;
                                 pages[index].ref_count = 1;
                                 return Some(self.info.base + (index as PAddr) * PAGE_SIZE as PAddr);
@@ -284,7 +285,7 @@ impl Arena {
     }
 
     /// Free a page back to this arena
-    fn free_page(&self, paddr: PAddr) -> Result {
+    fn free_page(&mut self, paddr: PAddr) -> Result {
         let offset = paddr - self.info.base;
         if offset % PAGE_SIZE as PAddr != 0 {
             return Err(RX_ERR_INVALID_ARGS);
@@ -296,16 +297,17 @@ impl Arena {
         }
 
         // Update bitmap
-        if let Some(bitmap) = self.bitmap {
+        if let Some(bitmap) = &mut self.bitmap {
             let word_index = index / 64;
             let bit = index % 64;
 
             // Clear the bit to mark as free
-            bitmap[word_index].fetch_and(!(1u64 << bit), Ordering::Release);
+            let atomic_word = unsafe { &*(bitmap[word_index] as *const u64 as *const core::sync::atomic::AtomicU64) };
+            atomic_word.fetch_and(!(1u64 << bit), Ordering::Release);
         }
 
         // Update page state
-        if let Some(pages) = self.pages {
+        if let Some(pages) = &mut self.pages {
             pages[index].state = PageState::Free;
             pages[index].ref_count = 0;
         }
@@ -322,6 +324,154 @@ impl Arena {
     /// Get the total number of pages
     fn total_count(&self) -> u64 {
         self.total_count
+    }
+
+    /// Allocate multiple contiguous pages
+    ///
+    /// # Arguments
+    ///
+    /// * `count` - Number of contiguous pages to allocate
+    /// * `align_log2` - Alignment as log2 (0 = page aligned, 12 = 4KB, etc.)
+    ///
+    /// # Returns
+    ///
+    /// Physical address of the first allocated page, or None
+    fn alloc_contiguous(&mut self, count: usize, align_log2: u8) -> Option<PAddr> {
+        if count == 0 {
+            return None;
+        }
+
+        let bitmap = self.bitmap.as_mut()?;
+        let align = if align_log2 <= PAGE_SIZE_SHIFT {
+            1
+        } else {
+            1_usize << (align_log2 - PAGE_SIZE_SHIFT)
+        };
+
+        // Calculate the number of bitmap words we need to check
+        let total_pages = self.total_count as usize;
+
+        // Search for a contiguous run of free pages
+        let mut start_index = 0;
+
+        while start_index + count <= total_pages {
+            // Check alignment
+            if align > 1 && (start_index % align) != 0 {
+                start_index = ((start_index / align) + 1) * align;
+                continue;
+            }
+
+            // Check if all pages in this range are free
+            let mut all_free = true;
+
+            for page_idx in start_index..(start_index + count) {
+                let word_index = page_idx / 64;
+                let bit = page_idx % 64;
+                let atomic_word = unsafe { &*(bitmap[word_index] as *const u64 as *const core::sync::atomic::AtomicU64) };
+                let word_val = atomic_word.load(Ordering::Acquire);
+
+                if word_val & (1u64 << bit) != 0 {
+                    // Page is allocated
+                    all_free = false;
+                    // Skip past this allocated page
+                    start_index = page_idx + 1;
+                    break;
+                }
+            }
+
+            if all_free {
+                // Try to allocate all pages in this range
+                let mut allocated = 0;
+
+                for page_idx in start_index..(start_index + count) {
+                    let word_index = page_idx / 64;
+                    let bit = page_idx % 64;
+                    let mask = 1u64 << bit;
+                    let atomic_word = unsafe { &*(bitmap[word_index] as *const u64 as *const core::sync::atomic::AtomicU64) };
+                    let old = atomic_word.fetch_or(mask, Ordering::Acquire);
+
+                    if (old & mask) != 0 {
+                        // Someone else allocated this page, need to rollback
+                        // Free the pages we already allocated
+                        for prev_idx in start_index..page_idx {
+                            let prev_word = prev_idx / 64;
+                            let prev_bit = prev_idx % 64;
+                            let prev_atomic = unsafe { &*(bitmap[prev_word] as *const u64 as *const core::sync::atomic::AtomicU64) };
+                            prev_atomic.fetch_and(!(1u64 << prev_bit), Ordering::Release);
+                        }
+                        all_free = false;
+                        start_index = page_idx + 1;
+                        break;
+                    }
+
+                    allocated += 1;
+                }
+
+                if all_free && allocated == count {
+                    // Successfully allocated all pages
+                    self.free_count.fetch_sub(count as u64, Ordering::Relaxed);
+
+                    // Update page states
+                    if let Some(pages) = &mut self.pages {
+                        for page_idx in start_index..(start_index + count) {
+                            pages[page_idx].state = PageState::Allocated;
+                            pages[page_idx].ref_count = 1;
+                        }
+                    }
+
+                    return Some(self.info.base + (start_index as PAddr) * PAGE_SIZE as PAddr);
+                }
+            }
+        }
+
+        None
+    }
+
+    /// Free multiple contiguous pages
+    ///
+    /// # Arguments
+    ///
+    /// * `paddr` - Physical address of the first page to free
+    /// * `count` - Number of contiguous pages to free
+    ///
+    /// # Returns
+    ///
+    /// RX_OK on success, or an error code
+    fn free_contiguous(&mut self, paddr: PAddr, count: usize) -> rx_status_t {
+        let offset = paddr - self.info.base;
+        if offset % PAGE_SIZE as PAddr != 0 {
+            return RX_ERR_INVALID_ARGS;
+        }
+
+        let start_index = (offset / PAGE_SIZE as PAddr) as usize;
+
+        // Check if range is within this arena
+        if start_index + count > self.total_count as usize {
+            return RX_ERR_INVALID_ARGS;
+        }
+
+        // Update bitmap for all pages
+        if let Some(bitmap) = &mut self.bitmap {
+            for page_idx in start_index..(start_index + count) {
+                let word_index = page_idx / 64;
+                let bit = page_idx % 64;
+
+                // Clear the bit to mark as free
+                let atomic_word = unsafe { &*(bitmap[word_index] as *const u64 as *const core::sync::atomic::AtomicU64) };
+                atomic_word.fetch_and(!(1u64 << bit), Ordering::Release);
+            }
+        }
+
+        // Update page states
+        if let Some(pages) = &mut self.pages {
+            for page_idx in start_index..(start_index + count) {
+                pages[page_idx].state = PageState::Free;
+                pages[page_idx].ref_count = 0;
+            }
+        }
+
+        self.free_count.fetch_add(count as u64, Ordering::Relaxed);
+        RX_OK
     }
 }
 
@@ -411,7 +561,7 @@ pub unsafe fn pmm_add_arena(info: ArenaInfo) -> rx_status_t {
     }
 
     // Allocate page structures array
-    let pages_layout = core::alloc::Layout::array::<Page>(page_count);
+    let pages_layout = core::alloc::Layout::array::<Page>(page_count).unwrap();
     let pages = core::ptr::slice_from_raw_parts_mut(
         pages_alloc(pages_layout) as *mut Page,
         page_count,
@@ -419,26 +569,32 @@ pub unsafe fn pmm_add_arena(info: ArenaInfo) -> rx_status_t {
 
     // Initialize page structures
     for i in 0..page_count {
-        pages[i] = Page::new(info.base + (i as PAddr) * PAGE_SIZE as PAddr, NUM_ARENAS as u8, i as u32);
+        unsafe { (*pages)[i] = Page::new(info.base + (i as PAddr) * PAGE_SIZE as PAddr, NUM_ARENAS as u8, i as u32) };
     }
 
     // Allocate bitmap (64 bits per u64, one bit per page)
     let bitmap_count = (page_count + 63) / 64;
-    let bitmap_layout = core::alloc::Layout::array::<u64>(bitmap_count);
+    let bitmap_layout = core::alloc::Layout::array::<u64>(bitmap_count).unwrap();
     let bitmap = core::ptr::slice_from_raw_parts_mut(
         pages_alloc(bitmap_layout) as *mut u64,
         bitmap_count,
     );
 
     // Initialize bitmap to all free (all zeros)
-    for word in bitmap.iter_mut() {
-        *word = 0;
+    unsafe {
+        if let Some(slice) = bitmap.as_mut() {
+            for word in slice.iter_mut() {
+                *word = 0;
+            }
+        }
     }
 
     // Initialize arena
     let arena = &mut ARENAS[NUM_ARENAS];
     arena.info = info;
-    arena.init(pages, bitmap);
+    unsafe {
+        arena.init(&mut *pages, &mut *bitmap);
+    }
 
     NUM_ARENAS += 1;
     RX_OK
@@ -454,7 +610,7 @@ pub unsafe fn pmm_add_arena(info: ArenaInfo) -> rx_status_t {
 ///
 /// Physical address of the allocated page, or an error
 pub fn pmm_alloc_page(flags: u32) -> Result<PAddr> {
-    let arenas = unsafe { &ARENAS[..NUM_ARENAS] };
+    let arenas = unsafe { &mut ARENAS[..NUM_ARENAS] };
 
     // Try to allocate from matching arenas
     for arena in arenas {
@@ -491,9 +647,20 @@ pub fn pmm_alloc_contiguous(count: usize, flags: u32, align_log2: u8) -> Result<
         return pmm_alloc_page(flags);
     }
 
-    // TODO: Implement proper contiguous allocation
-    // For now, fail
-    Err(RX_ERR_NOT_SUPPORTED)
+    let arenas = unsafe { &mut ARENAS[..NUM_ARENAS] };
+
+    // Try to allocate from matching arenas
+    for arena in arenas {
+        if flags == PMM_ALLOC_FLAG_LOW_MEM && (arena.info.flags & ARENA_FLAG_LOW_MEM) == 0 {
+            continue;
+        }
+
+        if let Some(paddr) = arena.alloc_contiguous(count, align_log2) {
+            return Ok(paddr);
+        }
+    }
+
+    Err(RX_ERR_NO_MEMORY)
 }
 
 /// Free a physical page
@@ -506,12 +673,44 @@ pub fn pmm_alloc_contiguous(count: usize, flags: u32, align_log2: u8) -> Result<
 ///
 /// `RX_OK` on success, or an error code
 pub fn pmm_free_page(paddr: PAddr) -> rx_status_t {
-    let arenas = unsafe { &ARENAS[..NUM_ARENAS] };
+    let arenas = unsafe { &mut ARENAS[..NUM_ARENAS] };
 
     // Find the arena containing this page
     for arena in arenas {
         if paddr >= arena.info.base && paddr < arena.info.end() {
-            return arena.free_page(paddr);
+            return match arena.free_page(paddr) {
+                Ok(()) => RX_OK,
+                Err(e) => e,
+            };
+        }
+    }
+
+    RX_ERR_INVALID_ARGS
+}
+
+/// Free multiple contiguous physical pages
+///
+/// # Arguments
+///
+/// * `paddr` - Physical address of the first page to free
+/// * `count` - Number of contiguous pages to free
+///
+/// # Returns
+///
+/// `RX_OK` on success, or an error code
+pub fn pmm_free_contiguous(paddr: PAddr, count: usize) -> rx_status_t {
+    if count == 0 {
+        return RX_ERR_INVALID_ARGS;
+    }
+
+    let arenas = unsafe { &mut ARENAS[..NUM_ARENAS] };
+
+    // Find the arena containing this page range
+    let end_addr = paddr + (count as PAddr) * PAGE_SIZE as PAddr;
+
+    for arena in arenas {
+        if paddr >= arena.info.base && end_addr <= arena.info.end() {
+            return arena.free_contiguous(paddr, count);
         }
     }
 
@@ -576,7 +775,7 @@ pub fn paddr_to_page(paddr: PAddr) -> *mut Page {
             let offset = paddr - arena.info.base;
             let index = (offset / PAGE_SIZE as PAddr) as usize;
 
-            if let Some(pages) = arena.pages {
+            if let Some(ref pages) = arena.pages {
                 if index < pages.len() {
                     return &pages[index] as *const _ as *mut _;
                 }

@@ -16,6 +16,30 @@ extern crate alloc;
 
 use core::panic::PanicInfo;
 
+// ============================================================================
+// Kernel Constants for Linker Script
+// ============================================================================
+
+/// Kernel base address (identity mapped at 1MB for QEMU boot)
+#[cfg(target_arch = "x86_64")]
+#[no_mangle]
+pub static KERNEL_BASE: u64 = 0x0010_0000;
+
+/// Boot header size
+#[no_mangle]
+pub static BOOT_HEADER_SIZE: u64 = 0x50;
+
+/// Maximum number of CPUs
+#[no_mangle]
+pub static SMP_MAX_CPUS: u64 = 64;
+
+// Extern reference to multiboot header to ensure it's linked
+#[link_section = ".multiboot"]
+extern "C" {
+    #[link_name = "multiboot_header"]
+    static MULTIBOOT_HEADER: [u8; 12];
+}
+
 // Common types
 mod rustux;
 
@@ -47,6 +71,16 @@ pub extern "C" fn kmain() -> ! {
 /// This function is called when the kernel encounters a panic.
 #[panic_handler]
 fn panic(_info: &PanicInfo) -> ! {
+    loop {
+        core::hint::spin_loop();
+    }
+}
+
+/// Exception handling personality function
+///
+/// This is required by the compiler even though we don't use exceptions.
+#[no_mangle]
+pub extern "C" fn rust_eh_personality() -> ! {
     loop {
         core::hint::spin_loop();
     }

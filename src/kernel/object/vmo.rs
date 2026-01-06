@@ -198,18 +198,18 @@ impl PageMap {
 
         // Allocate new page
         let paddr = pmm::alloc_page()?;
-        let paddr = pmm::paddr_to_vaddr(paddr);
+        let vaddr = pmm::paddr_to_vaddr(paddr) as PAddr;
 
         // Add to map
         let mut pages = self.pages.lock();
         pages.insert(offset, PageMapEntry {
-            paddr,
+            paddr: vaddr,
             present: true,
             writable: true,
         });
         self.committed_pages.fetch_add(1, Ordering::Relaxed);
 
-        Ok(paddr)
+        Ok(vaddr)
     }
 
     /// Mark a page as copy-on-write
@@ -279,6 +279,10 @@ pub struct Vmo {
 
     /// Reference count
     pub ref_count: AtomicUsize,
+
+    /// Address spaces this VMO is mapped into (for shared memory tracking)
+    /// Stores AddressSpace IDs (or Process IDs)
+    mapped_aspaces: Mutex<alloc::collections::BTreeSet<u64>>,
 }
 
 impl Vmo {
@@ -310,6 +314,7 @@ impl Vmo {
             children: Mutex::new(Vec::new()),
             cache_policy: Mutex::new(CachePolicy::Default),
             ref_count: AtomicUsize::new(1),
+            mapped_aspaces: Mutex::new(alloc::collections::BTreeSet::new()),
         })
     }
 
@@ -471,6 +476,7 @@ impl Vmo {
             children: Mutex::new(Vec::new()),
             cache_policy: Mutex::new(self.cache_policy()),
             ref_count: AtomicUsize::new(1),
+            mapped_aspaces: Mutex::new(alloc::collections::BTreeSet::new()),
         };
 
         // Add as child
@@ -489,6 +495,49 @@ impl Vmo {
     /// Returns true if this was the last reference.
     pub fn ref_dec(&self) -> bool {
         self.ref_count.fetch_sub(1, Ordering::Release) == 1
+    }
+
+    /// Add a mapping to an address space
+    ///
+    /// Called when this VMO is mapped into an address space.
+    /// This tracks which address spaces have this VMO mapped.
+    ///
+    /// # Arguments
+    ///
+    /// * `aspace_id` - Address space ID (or Process ID)
+    pub fn add_mapping(&self, aspace_id: u64) {
+        self.mapped_aspaces.lock().insert(aspace_id);
+    }
+
+    /// Remove a mapping from an address space
+    ///
+    /// Called when this VMO is unmapped from an address space.
+    ///
+    /// # Arguments
+    ///
+    /// * `aspace_id` - Address space ID (or Process ID)
+    pub fn remove_mapping(&self, aspace_id: u64) {
+        self.mapped_aspaces.lock().remove(&aspace_id);
+    }
+
+    /// Get share count
+    ///
+    /// Returns the number of unique address spaces this VMO is mapped into.
+    /// A VMO is "shared" if this count is >= 2.
+    pub fn share_count(&self) -> u32 {
+        let count = self.mapped_aspaces.lock().len();
+        if count < 2 {
+            1  // Not shared (or mapped into single address space)
+        } else {
+            count as u32
+        }
+    }
+
+    /// Check if this VMO is shared
+    ///
+    /// Returns true if this VMO is mapped into multiple address spaces.
+    pub fn is_shared(&self) -> bool {
+        self.share_count() >= 2
     }
 }
 

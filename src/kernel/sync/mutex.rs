@@ -37,6 +37,7 @@
 use crate::kernel::thread::{Thread, ThreadId};
 use crate::rustux::types::*;
 use core::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use core::cell::UnsafeCell;
 use crate::kernel::sync::spin::SpinMutex as SpinMutex;
 use alloc::vec::Vec;
 
@@ -52,7 +53,7 @@ use crate::log_debug;
 /// Tracks ownership and integrates with scheduler for blocking.
 pub struct Mutex<T> {
     /// Protected data
-    data: T,
+    data: UnsafeCell<T>,
 
     /// Current owner (0 = unlocked, otherwise ThreadId)
     owner: AtomicU64,
@@ -74,7 +75,7 @@ impl<T> Mutex<T> {
     /// Create a new mutex
     pub const fn new(data: T) -> Self {
         Self {
-            data,
+            data: UnsafeCell::new(data),
             owner: AtomicU64::new(0),
             has_waiters: AtomicBool::new(false),
             magic: MUTEX_MAGIC,
@@ -142,7 +143,7 @@ impl<T> Mutex<T> {
     ///
     /// This is unsafe and should only be used when you know the mutex is locked.
     pub unsafe fn raw_data(&self) -> &T {
-        &self.data
+        &*self.data.get()
     }
 
     /// Get raw mutable access to the data (without locking)
@@ -151,7 +152,7 @@ impl<T> Mutex<T> {
     ///
     /// This is unsafe and should only be used when you know the mutex is locked.
     pub unsafe fn raw_data_mut(&mut self) -> &mut T {
-        &mut self.data
+        &mut *self.data.get()
     }
 
     /// Release the mutex
@@ -281,13 +282,13 @@ impl<'a, T> MutexGuard<'a, T> {
 
     /// Access the protected data
     pub fn data(&self) -> &T {
-        &self.mutex.data
+        unsafe { &*self.mutex.data.get() }
     }
 
     /// Mutably access the protected data
     pub fn data_mut(&mut self) -> &mut T {
         // SAFETY: We have exclusive access through the guard
-        unsafe { &mut *((&self.mutex.data as *const T) as *mut T) }
+        unsafe { &mut *self.mutex.data.get() }
     }
 }
 
@@ -295,14 +296,14 @@ impl<'a, T> core::ops::Deref for MutexGuard<'a, T> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
-        &self.mutex.data
+        unsafe { &*self.mutex.data.get() }
     }
 }
 
 impl<'a, T> core::ops::DerefMut for MutexGuard<'a, T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         // SAFETY: We have exclusive access through the guard
-        unsafe { &mut *((&self.mutex.data as *const T) as *mut T) }
+        unsafe { &mut *self.mutex.data.get() }
     }
 }
 
@@ -332,6 +333,18 @@ impl ThreadIdExt for ThreadId {
         1
     }
 }
+
+// ============================================================================
+// Send and Sync implementations
+// ============================================================================
+
+// SAFETY: Mutex<T> can be sent to another thread if T is Send
+// because the Mutex ensures exclusive access to the data.
+unsafe impl<T: Send> Send for Mutex<T> {}
+
+// SAFETY: Mutex<T> can be shared between threads if T is Send
+// because the Mutex ensures only one thread at a time can access the data.
+unsafe impl<T: Send> Sync for Mutex<T> {}
 
 // ============================================================================
 // Tests

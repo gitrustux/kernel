@@ -75,6 +75,9 @@ impl Rights {
     /// Admin control
     pub const MANAGE: Self = Self(0x80);
 
+    /// Apply profile to thread
+    pub const APPLY_PROFILE: Self = Self(0x100);
+
     /// Basic rights (READ | WRITE)
     pub const BASIC: Self = Self(0x03);
 
@@ -154,6 +157,7 @@ impl Rights {
             ObjectType::Timer => Self::SIGNAL | Self::WRITE,
             ObjectType::Job => Self::MANAGE,
             ObjectType::Port => Self::READ | Self::WRITE,
+            ObjectType::Profile => Self::READ,
             ObjectType::Unknown => Self::NONE,
         }
     }
@@ -172,6 +176,30 @@ impl core::ops::BitAnd for Rights {
 
     fn bitand(self, rhs: Self) -> Self::Output {
         Self(self.0 & rhs.0)
+    }
+}
+
+impl core::ops::BitOrAssign for Rights {
+    fn bitor_assign(&mut self, rhs: Self) {
+        self.0 |= rhs.0;
+    }
+}
+
+impl core::ops::BitAndAssign for Rights {
+    fn bitand_assign(&mut self, rhs: Self) {
+        self.0 &= rhs.0;
+    }
+}
+
+impl core::fmt::LowerHex for Rights {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "{:#x}", self.0)
+    }
+}
+
+impl core::fmt::UpperHex for Rights {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "{:#X}", self.0)
     }
 }
 
@@ -234,6 +262,9 @@ pub enum ObjectType {
 
     /// Port (waitset)
     Port = 10,
+
+    /// Profile object
+    Profile = 11,
 }
 
 impl ObjectType {
@@ -250,6 +281,7 @@ impl ObjectType {
             8 => Self::Timer,
             9 => Self::Job,
             10 => Self::Port,
+            11 => Self::Profile,
             _ => Self::Unknown,
         }
     }
@@ -273,6 +305,7 @@ impl ObjectType {
             Self::Timer => "timer",
             Self::Job => "job",
             Self::Port => "port",
+            Self::Profile => "profile",
         }
     }
 }
@@ -431,7 +464,7 @@ impl Handle {
         }
         unsafe {
             if !self.base.is_null() {
-                (*self.base).type_id()
+                (*self.base).obj_type
             } else {
                 ObjectType::Unknown
             }
@@ -532,11 +565,15 @@ impl HandleOwner {
     }
 
     /// Take the handle out (consuming the owner)
-    pub fn take(self) -> Handle {
-        let h = self.handle;
+    pub fn take(mut self) -> Handle {
+        let handle = core::mem::replace(&mut self.handle, Handle {
+            id: 0,
+            base: core::ptr::null(),
+            rights: Rights::NONE,
+        });
         // Prevent Drop from closing the handle
         core::mem::forget(self);
-        h
+        handle
     }
 }
 

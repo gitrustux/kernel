@@ -393,16 +393,19 @@ impl ArchFpu for Amd64Arch {
     }
 
     unsafe fn save(state: *mut Self::FpuState) {
+        // Get the current thread - for now use null
+        // In a real implementation, this would get the current thread
         amd64::debugger::x86_get_set_vector_regs(
-            core::ptr::null_mut(),
+            &mut crate::kernel::thread::Thread::dummy_thread(),
             state,
             crate::kernel::arch::amd64::debugger::RegAccess::Get,
         );
     }
 
     unsafe fn restore(state: *const Self::FpuState) {
+        // Get the current thread - for now use null
         amd64::debugger::x86_get_set_vector_regs(
-            core::ptr::null_mut(),
+            &mut crate::kernel::thread::Thread::dummy_thread(),
             state as *mut _,
             crate::kernel::arch::amd64::debugger::RegAccess::Set,
         );

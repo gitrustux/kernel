@@ -40,6 +40,7 @@ use crate::kernel::percpu;
 use crate::rustux::types::*;
 use crate::rustux::types::err::*;
 use core::sync::atomic::{AtomicBool, AtomicU64, AtomicU32, Ordering};
+use core::mem::MaybeUninit;
 
 // Import logging macros
 use crate::log_info;
@@ -196,7 +197,7 @@ impl MpIpiQueue {
 }
 
 /// Global MP state (static)
-static mut MP_STATE: MpState = MpState::new();
+static mut MP_STATE: MaybeUninit<MpState> = MaybeUninit::uninit();
 
 impl MpState {
     const fn new() -> Self {
@@ -213,7 +214,7 @@ impl MpState {
             online_cpus: AtomicU64::new(0),
             realtime_cpus: AtomicU64::new(0),
             ipi_task_lock: Mutex::new(()),
-            ipi_task_queues: new_queues().0,
+            ipi_task_queues: unsafe { core::mem::zeroed() },
         }
     }
 }
@@ -222,8 +223,26 @@ impl MpState {
 /// Public API
 /// ============================================================================
 
+/// Get a reference to the global MP state
+/// # Safety
+/// This is only safe to call after mp_init() has been called.
+fn get_state() -> &'static MpState {
+    unsafe { MP_STATE.assume_init_ref() }
+}
+
+/// Get a mutable reference to the global MP state
+/// # Safety
+/// This is only safe to call when you have exclusive access.
+unsafe fn get_state_mut() -> &'static mut MpState {
+    unsafe { MP_STATE.assume_init_mut() }
+}
+
 /// Initialize MP subsystem
 pub fn mp_init() {
+    // Initialize MP_STATE in place
+    unsafe {
+        MP_STATE.as_mut_ptr().write(MpState::new());
+    }
     log_info!("MP subsystem initialized");
 }
 
@@ -234,33 +253,31 @@ pub fn mp_max_num_cpus() -> u32 {
 
 /// Get the number of online CPUs
 pub fn mp_num_cpus() -> u32 {
-    unsafe {
-        let mask = MP_STATE.online_cpus.load(Ordering::Acquire);
-        mask.count_ones() as u32
-    }
+    let mask = unsafe { get_state().online_cpus.load(Ordering::Acquire) };
+    mask.count_ones() as u32
 }
 
 /// Get the online CPU mask
 pub fn mp_get_online_mask() -> CpuMask {
-    unsafe { MP_STATE.online_cpus.load(Ordering::Acquire) }
+    unsafe { get_state().online_cpus.load(Ordering::Acquire) }
 }
 
 /// Get the active CPU mask
 pub fn mp_get_active_mask() -> CpuMask {
-    unsafe { MP_STATE.active_cpus.load(Ordering::Acquire) }
+    unsafe { get_state().active_cpus.load(Ordering::Acquire) }
 }
 
 /// Check if a CPU is online
 pub fn mp_is_cpu_online(cpu: u32) -> bool {
     unsafe {
-        (MP_STATE.online_cpus.load(Ordering::Acquire) & cpu_num_to_mask(cpu)) != 0
+        (get_state().online_cpus.load(Ordering::Acquire) & cpu_num_to_mask(cpu)) != 0
     }
 }
 
 /// Check if a CPU is active
 pub fn mp_is_cpu_active(cpu: u32) -> bool {
     unsafe {
-        (MP_STATE.active_cpus.load(Ordering::Acquire) & cpu_num_to_mask(cpu)) != 0
+        (get_state().active_cpus.load(Ordering::Acquire) & cpu_num_to_mask(cpu)) != 0
     }
 }
 
@@ -272,9 +289,9 @@ pub fn mp_set_curr_cpu_online(online: bool) {
         let mask = cpu_num_to_mask(cpu);
 
         if online {
-            MP_STATE.online_cpus.fetch_or(mask, Ordering::Release);
+            get_state().online_cpus.fetch_or(mask, Ordering::Release);
         } else {
-            MP_STATE.online_cpus.fetch_and(!mask, Ordering::Release);
+            get_state().online_cpus.fetch_and(!mask, Ordering::Release);
         }
     }
 }
@@ -287,9 +304,9 @@ pub fn mp_set_curr_cpu_active(active: bool) {
         let mask = cpu_num_to_mask(cpu);
 
         if active {
-            MP_STATE.active_cpus.fetch_or(mask, Ordering::Release);
+            get_state().active_cpus.fetch_or(mask, Ordering::Release);
         } else {
-            MP_STATE.active_cpus.fetch_and(!mask, Ordering::Release);
+            get_state().active_cpus.fetch_and(!mask, Ordering::Release);
         }
     }
 }
@@ -305,12 +322,12 @@ pub fn mp_reschedule(mask: CpuMask, flags: u32) {
 
     // Mask out inactive and local CPUs
     let mut target_mask = mask;
-    target_mask &= unsafe { MP_STATE.active_cpus.load(Ordering::Acquire) };
+    target_mask &= unsafe { get_state().active_cpus.load(Ordering::Acquire) };
     target_mask &= !cpu_num_to_mask(local_cpu);
 
     // Mask out realtime CPUs if flag not set
     if (flags & MP_RESCHEDULE_FLAG_REALTIME) == 0 {
-        target_mask &= unsafe { !MP_STATE.realtime_cpus.load(Ordering::Acquire) };
+        target_mask &= unsafe { !get_state().realtime_cpus.load(Ordering::Acquire) };
     }
 
     if target_mask == 0 {
@@ -360,7 +377,7 @@ pub fn mp_send_ipi(target: MpIpiTarget, mask: CpuMask, ipi_type: MpIpiType) {
 
     #[cfg(target_arch = "x86_64")]
     {
-        crate::kernel::arch::amd64::interrupts::amd64_send_ipi(target_mask, ipi_type);
+        crate::kernel::arch::amd64::interrupts::amd64_send_ipi(target_mask, ipi_type as u8);
     }
 
     #[cfg(target_arch = "riscv64")]
@@ -418,7 +435,7 @@ pub fn mp_sync_exec(
 
     unsafe {
         // Enqueue tasks
-        let _lock = MP_STATE.ipi_task_lock.lock();
+        let _lock = get_state().ipi_task_lock.lock();
 
         let mut cpu_id = 0;
         while remote_mask != 0 && cpu_id < SMP_MAX_CPUS {
@@ -460,7 +477,7 @@ pub fn mp_mbx_generic_irq() {
     // Process all tasks in queue
     loop {
         let task = unsafe {
-            let mut queue = MP_STATE.ipi_task_queues[local_cpu].lock();
+            let mut queue = get_state().ipi_task_queues[local_cpu].lock();
             queue.pop()
         };
 
@@ -509,7 +526,7 @@ pub fn mp_mbx_interrupt_irq() {
 /// - `Err(RX_ERR_BAD_STATE)` if CPUs are already online
 /// - `Err(RX_ERR_NOT_SUPPORTED)` if platform doesn't support hotplug
 pub fn mp_hotplug_cpu_mask(cpu_mask: CpuMask) -> Result {
-    let _lock = unsafe { MP_STATE.hotplug_lock.lock() };
+    let _lock = unsafe { get_state().hotplug_lock.lock() };
 
     // Check if any CPUs are already online
     if cpu_mask & mp_get_online_mask() != 0 {
@@ -552,7 +569,7 @@ pub fn mp_hotplug_cpu_mask(cpu_mask: CpuMask) -> Result {
 /// - `Err(RX_ERR_BAD_STATE)` if CPUs are not online
 /// - `Err(RX_ERR_NOT_SUPPORTED)` if platform doesn't support hotplug
 pub fn mp_unplug_cpu_mask(cpu_mask: CpuMask) -> Result {
-    let _lock = unsafe { MP_STATE.hotplug_lock.lock() };
+    let _lock = unsafe { get_state().hotplug_lock.lock() };
 
     // Check if all CPUs are online
     if cpu_mask & !mp_get_online_mask() != 0 {
@@ -584,7 +601,7 @@ pub fn mp_unplug_cpu_mask(cpu_mask: CpuMask) -> Result {
 
         // Mark CPU as offline
         unsafe {
-            MP_STATE.online_cpus.fetch_and(!cpu_num_to_mask(cpu_id), Ordering::Release);
+            get_state().online_cpus.fetch_and(!cpu_num_to_mask(cpu_id), Ordering::Release);
         }
     }
 

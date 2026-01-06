@@ -91,9 +91,9 @@ pub unsafe fn x86_send_ipi(vector: u32, target_cpu: u32) -> i32 {
 
     // Send the IPI using the APIC
     apic::apic_send_ipi(
-        vector,
+        0, // shorthand (0 = no shorthand)
         target_cpu,
-        apic::ApicInterruptDeliveryMode::Fixed,
+        apic::ApicInterruptDeliveryMode::Fixed as u8,
     );
 
     0 // OK
@@ -154,7 +154,7 @@ pub unsafe fn x86_broadcast_ipi_self(vector: u32) -> i32 {
     let vector = vector as u8;
 
     // Broadcast the IPI to all except self
-    apic::apic_send_broadcast_self_ipi(vector, apic::ApicInterruptDeliveryMode::Fixed);
+    apic::apic_send_broadcast_self_ipi(vector);
 
     0 // OK
 }

@@ -342,7 +342,7 @@ impl WaitQueue {
 ///
 /// This is called when an object is signaled.
 pub fn wake_waiters(handle: u32, signals: u64) -> usize {
-    WAIT_QUEUE_REGISTRY.signal(handle, signals)
+    unsafe { WAIT_QUEUE_REGISTRY.signal(handle, signals) }
 }
 
 /// Timeout all waiters on a specific handle
@@ -381,7 +381,7 @@ impl WaitQueueRegistry {
         }
     }
 
-    fn get_or_create(&self, handle: u32) -> &'static WaitQueue {
+    fn get_or_create(&mut self, handle: u32) -> &mut WaitQueue {
         let idx = (handle as usize) % MAX_WAIT_QUEUES;
 
         // Note: This is simplified - in a real implementation we'd need
@@ -391,10 +391,9 @@ impl WaitQueueRegistry {
                 // Create a new wait queue
                 // This is unsafe - in reality we'd need proper initialization
                 let queue = WaitQueue::new();
-                &*(((&queue as *const WaitQueue) as usize + idx * core::mem::size_of::<WaitQueue>()) as *const WaitQueue)
-            } else {
-                self.queues[idx].as_ref().unwrap()
+                self.queues[idx] = Some(queue);
             }
+            self.queues[idx].as_mut().unwrap()
         }
     }
 
@@ -409,7 +408,7 @@ impl WaitQueueRegistry {
 }
 
 /// Global wait queue registry
-static WAIT_QUEUE_REGISTRY: WaitQueueRegistry = WaitQueueRegistry::new();
+static mut WAIT_QUEUE_REGISTRY: WaitQueueRegistry = WaitQueueRegistry::new();
 
 /// ============================================================================
 /// Syscall: Object Wait One
@@ -450,10 +449,10 @@ pub fn sys_object_wait_one_impl(
     let thread_id = crate::kernel::thread::current_thread_id();
 
     // Get or create the wait queue for this handle
-    let queue = WAIT_QUEUE_REGISTRY.get_or_create(handle_val);
+    let queue = unsafe { WAIT_QUEUE_REGISTRY.get_or_create(handle_val) };
 
     // Add ourselves to the wait queue
-    if let Err(err) = queue.wait(thread_id, signals, deadline, observed_out) {
+    if let Err(err) = queue.wait(thread_id as usize, signals, deadline, observed_out) {
         log_error!("sys_object_wait_one: failed to enqueue: {:?}", err);
         return err_to_ret(err);
     }
@@ -467,7 +466,7 @@ pub fn sys_object_wait_one_impl(
 
     // Copy observed signals to user
     if observed_out != 0 {
-        let user_ptr = UserPtr::<u64>::new(observed_out);
+        let user_ptr = UserPtr::<u8>::new(observed_out);
         unsafe {
             if let Err(err) = copy_to_user(user_ptr, &observed as *const u64 as *const u8, 8) {
                 log_error!("sys_object_wait_one: copy_to_user failed: {:?}", err);
@@ -529,7 +528,7 @@ pub fn sys_object_wait_many_impl(user_items: usize, count: usize, deadline: u64)
     }; count];
 
     // Copy wait items from user
-    let user_ptr = UserPtr::<WaitItem>::new(user_items);
+    let user_ptr = UserPtr::<u8>::new(user_items);
     unsafe {
         if let Err(err) = copy_from_user(
             items.as_mut_ptr() as *mut u8,
@@ -558,7 +557,7 @@ pub fn sys_object_wait_many_impl(user_items: usize, count: usize, deadline: u64)
     }
 
     // Copy wait items back to user
-    let user_ptr = UserPtr::<WaitItem>::new(user_items);
+    let user_ptr = UserPtr::<u8>::new(user_items);
     unsafe {
         if let Err(err) = copy_to_user(
             user_ptr,

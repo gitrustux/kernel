@@ -103,6 +103,24 @@ pub union PacketPayload {
     pub bytes: [u8; 32],
 }
 
+impl Clone for PacketPayload {
+    fn clone(&self) -> Self {
+        unsafe {
+            Self { bytes: self.bytes }
+        }
+    }
+}
+
+impl core::fmt::Debug for PacketPayload {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        unsafe {
+            f.debug_struct("PacketPayload")
+                .field("bytes", &self.bytes)
+                .finish()
+        }
+    }
+}
+
 /// User packet data
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
@@ -257,7 +275,7 @@ impl PortRegistry {
 }
 
 /// Global port registry
-static PORT_REGISTRY: PortRegistry = PortRegistry::new();
+static PORT_REGISTRY: Mutex<PortRegistry> = Mutex::new(PortRegistry::new());
 
 /// ============================================================================
 /// Port ID Allocation
@@ -299,7 +317,7 @@ pub fn sys_port_create_impl(options: u32) -> SyscallRet {
     let port = Arc::new(PortEntry::new(port_id));
 
     // Insert into port registry
-    if let Err(err) = PORT_REGISTRY.insert(port_id, port.clone()) {
+    if let Err(err) = PORT_REGISTRY.lock().insert(port_id, port.clone()) {
         log_error!("sys_port_create: failed to insert port: {:?}", err);
         return err_to_ret(err);
     }
@@ -330,7 +348,7 @@ pub fn sys_port_queue_impl(handle_val: u32, packet_in: usize) -> SyscallRet {
 
     // Look up port
     let port_id = handle_val as u64;
-    let port = match PORT_REGISTRY.get(port_id) {
+    let port = match PORT_REGISTRY.lock().get(port_id) {
         Some(p) => p,
         None => {
             log_error!("sys_port_queue: port not found");
@@ -346,7 +364,7 @@ pub fn sys_port_queue_impl(handle_val: u32, packet_in: usize) -> SyscallRet {
         payload: PacketPayload { bytes: [0; 32] },
     };
 
-    let user_ptr = UserPtr::<PortPacket>::new(packet_in);
+    let user_ptr = UserPtr::<u8>::new(packet_in);
     unsafe {
         if let Err(err) = copy_from_user(
             &mut packet as *mut PortPacket as *mut u8,
@@ -400,7 +418,7 @@ pub fn sys_port_wait_impl(handle_val: u32, deadline: u64, packet_out: usize) -> 
 
     // Look up port
     let port_id = handle_val as u64;
-    let port = match PORT_REGISTRY.get(port_id) {
+    let port = match PORT_REGISTRY.lock().get(port_id) {
         Some(p) => p,
         None => {
             log_error!("sys_port_wait: port not found");
@@ -437,7 +455,7 @@ pub fn sys_port_wait_impl(handle_val: u32, deadline: u64, packet_out: usize) -> 
     };
 
     // Copy packet to user
-    let user_ptr = UserPtr::<PortPacket>::new(packet_out);
+    let user_ptr = UserPtr::<u8>::new(packet_out);
     unsafe {
         if let Err(err) = copy_to_user(
             user_ptr,
@@ -478,7 +496,7 @@ pub fn sys_port_cancel_impl(handle_val: u32, source_handle: u32, key: u64) -> Sy
 
     // Look up port
     let port_id = handle_val as u64;
-    let port = match PORT_REGISTRY.get(port_id) {
+    let port = match PORT_REGISTRY.lock().get(port_id) {
         Some(p) => p,
         None => {
             log_error!("sys_port_cancel: port not found");
@@ -515,7 +533,7 @@ pub fn sys_port_cancel_impl(handle_val: u32, source_handle: u32, key: u64) -> Sy
 /// Get port subsystem statistics
 pub fn get_stats() -> PortStats {
     PortStats {
-        total_ports: PORT_REGISTRY.count(),
+        total_ports: PORT_REGISTRY.lock().count(),
         total_queued: 0, // TODO: Track total queued packets
         total_waiters: 0, // TODO: Track total waiters
     }

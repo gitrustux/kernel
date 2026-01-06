@@ -35,6 +35,7 @@ pub mod stacks;
 pub mod pager;
 pub mod stats;
 pub mod fault;
+pub mod walker;
 
 // Re-exports for convenience
 pub use layout::{

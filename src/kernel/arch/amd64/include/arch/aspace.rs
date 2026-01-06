@@ -18,6 +18,7 @@ use crate::kernel::arch::amd64::page_tables::mmu_flags;
 use crate::fbl::atomic::AtomicInt;
 use crate::fbl::canary::Canary;
 use crate::kernel::vm::arch_vm_aspace::ArchVmAspaceInterface;
+use crate::kernel::vm::{ArchPageTable, PageTableEntry, PageTableFlags, VmError, Result as VmResult};
 use crate::rustux::types::*;
 use crate::rustux::types::status;
 use core::cmp::max;
@@ -42,6 +43,14 @@ impl X86PageTableMmu {
             base: X86PageTableBase::new(),
             use_global_mappings: false,
         }
+    }
+
+    /// Create a new kernel MMU page table instance
+    pub fn new_kernel() -> VmResult<Self> {
+        let mut pt = Self::new();
+        pt.use_global_mappings = true;
+        // Note: init() should be called separately with the context
+        Ok(pt)
     }
 
     /// Initialize the page table with the given context
@@ -621,3 +630,97 @@ extern "C" {
 
 // Type alias for architecture-specific VM address space
 pub type ArchVmAspace = X86ArchVmAspace;
+
+// ============================================================================
+// x86_64 Page Table Entry
+// ============================================================================
+
+/// x86_64 page table entry
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+pub struct X86PageTableEntry(pub u64);
+
+impl PageTableEntry for X86PageTableEntry {
+    fn new() -> Self {
+        Self(0)
+    }
+
+    fn new_entry(paddr: usize, flags: PageTableFlags) -> Self {
+        // Physical address should be page-aligned
+        Self((paddr as u64) | flags.bits())
+    }
+
+    fn paddr(&self) -> usize {
+        // x86_64 page table entry: bits 12-51 (40 bits) contain physical address
+        (self.0 & 0x000F_FFFF_FFFF_F000) as usize
+    }
+
+    fn flags(&self) -> PageTableFlags {
+        PageTableFlags::from_bits(self.0 & 0xFF0_0000_0000_0FFF)
+    }
+
+    fn is_present(&self) -> bool {
+        (self.0 & 0x1) != 0
+    }
+
+    fn is_block(&self) -> bool {
+        // x86_64: bit 7 (PS) = 1 indicates large page
+        (self.0 & 0x80) != 0
+    }
+
+    fn set_flags(&mut self, flags: PageTableFlags) {
+        let paddr = self.paddr();
+        self.0 = (paddr as u64) | flags.bits();
+    }
+
+    fn as_bits(&self) -> u64 {
+        self.0
+    }
+
+    fn from_bits(bits: u64) -> Self {
+        Self(bits)
+    }
+}
+
+// ============================================================================
+// ArchPageTable trait implementation for X86PageTableMmu
+// ============================================================================
+
+use crate::kernel::vm::layout::{VAddr as VmVAddr, PAddr as VmPAddr};
+
+impl ArchPageTable for X86PageTableMmu {
+    type Entry = X86PageTableEntry;
+
+    fn new() -> VmResult<Self> {
+        Ok(Self::new())
+    }
+
+    fn map(&mut self, vaddr: VmVAddr, paddr: VmPAddr, flags: PageTableFlags) -> VmResult {
+        // TODO: Implement using X86ArchVmAspace::map
+        // This is a stub - proper implementation requires integration with aspace
+        Err(VmError::BadState)
+    }
+
+    fn unmap(&mut self, _vaddr: VmVAddr) -> VmResult {
+        // TODO: Implement using X86ArchVmAspace::unmap
+        Err(VmError::BadState)
+    }
+
+    fn resolve(&self, _vaddr: VmVAddr) -> Option<VmPAddr> {
+        // TODO: Implement using X86ArchVmAspace::query
+        None
+    }
+
+    fn protect(&mut self, _vaddr: VmVAddr, _flags: PageTableFlags) -> VmResult {
+        // TODO: Implement using X86ArchVmAspace::protect
+        Err(VmError::BadState)
+    }
+
+    fn flush_tlb(&self, _vaddr: Option<VmVAddr>) {
+        // TODO: Implement TLB flush
+    }
+
+    fn root_phys(&self) -> VmPAddr {
+        self.base.phys() as VmPAddr
+    }
+}

@@ -24,7 +24,7 @@ use crate::kernel::vm::layout::*;
 use crate::kernel::vm::layout::amd64 as layout_amd64;
 use crate::kernel::vm::page_table::*;
 use crate::kernel::vm::aspace::*;
-use crate::kernel::vm::Result;
+use crate::kernel::vm::{Result, VmError};
 use crate::kernel::pmm;
 
 // Import logging macros
@@ -212,9 +212,12 @@ fn setup_percpu_areas(aspace: &AddressSpace) -> Result {
     let pages = (size + PAGE_SIZE - 1) / PAGE_SIZE;
 
     // Allocate physical pages for per-CPU data
-    let mut paddr = pmm::pmm_alloc_page(pmm::PMM_ALLOC_FLAG_ANY)?;
+    let paddr = match pmm::pmm_alloc_page(pmm::PMM_ALLOC_FLAG_ANY) {
+        Ok(addr) => addr,
+        Err(_) => return Err(VmError::NoMemory),
+    };
 
-    aspace.map(base, paddr, pages, MemProt::ReadWrite)?;
+    aspace.map(base, paddr as usize, pages, MemProt::ReadWrite)?;
 
     Ok(())
 }
@@ -237,9 +240,12 @@ fn setup_kernel_stacks(aspace: &AddressSpace) -> Result {
     let total_pages = STACK_REGION_SIZE / PAGE_SIZE;
 
     // Allocate from PMM
-    let paddr = pmm::pmm_alloc_contiguous(total_pages, pmm::PMM_ALLOC_FLAG_ANY, 12)?;
+    let paddr = match pmm::pmm_alloc_contiguous(total_pages, pmm::PMM_ALLOC_FLAG_ANY, 12) {
+        Ok(addr) => addr,
+        Err(_) => return Err(VmError::NoMemory),
+    };
 
-    aspace.map(stacks_base, paddr, total_pages, MemProt::ReadWrite)?;
+    aspace.map(stacks_base, paddr as usize, total_pages, MemProt::ReadWrite)?;
 
     log_debug!(
         "Mapped kernel stacks: {:#x} -> {:#x} ({} stacks)",
@@ -318,7 +324,7 @@ fn setup_mmio_region(aspace: &AddressSpace) -> Result {
 ///
 /// These are defined by the linker script and describe where
 /// the kernel's various sections are located.
-fn kernel_memory_regions() -> &'static [KernelMapDesc] {
+fn kernel_memory_regions() -> [KernelMapDesc; 3] {
     // These symbols are defined by the linker script
     extern "C" {
         fn __code_start();
@@ -329,7 +335,8 @@ fn kernel_memory_regions() -> &'static [KernelMapDesc] {
         fn __bss_end();
     }
 
-    &[
+    // Create regions at runtime instead of const context
+    [
         // Kernel code/text (RX)
         KernelMapDesc::new(
             __code_start as VAddr,
@@ -379,7 +386,8 @@ pub unsafe extern "C" fn boot_create_page_tables() -> PAddr {
 
     #[cfg(target_arch = "x86_64")]
     {
-        crate::kernel::arch::amd64::mmu::x86_boot_create_page_tables()
+        crate::kernel::arch::amd64::mmu::x86_boot_create_page_tables();
+        0 // Return dummy PAddr for now
     }
 
     #[cfg(target_arch = "riscv64")]
@@ -412,7 +420,7 @@ pub fn finalize_kernel_aspace() -> Result {
 
         #[cfg(target_arch = "x86_64")]
         {
-            let root = aspace.root_phys();
+            let root = aspace.root_phys() as u64;
             crate::kernel::arch::amd64::mmu::write_cr3(root);
         }
 

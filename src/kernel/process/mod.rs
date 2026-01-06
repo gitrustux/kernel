@@ -46,7 +46,7 @@ use core::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
 // Import logging macros
 use crate::{log_debug, log_info};
-use crate::kernel::sync::Mutex;
+use crate::kernel::sync::{Mutex, MutexGuard};
 use crate::kernel::sync::spin::SpinMutex;
 use alloc::vec::Vec;
 
@@ -197,7 +197,7 @@ impl HandleRights {
 
 /// Handle table entry
 #[repr(C)]
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct HandleEntry {
     /// Handle value
     pub handle: Handle,
@@ -344,8 +344,8 @@ impl HandleTable {
 
         let handles = self.handles.lock();
 
-        if let Some(entry) = handles[idx] {
-            Ok(entry)
+        if let Some(ref entry) = handles[idx] {
+            Ok(entry.clone())
         } else {
             Err(crate::kernel::vm::VmError::NotFound)
         }
@@ -477,9 +477,9 @@ impl Process {
         *self.address_space.lock() = Some(aspace);
     }
 
-    /// Get the address space
-    pub fn address_space(&self) -> Option<AddressSpace> {
-        self.address_space.lock().as_ref().cloned()
+    /// Get the address space (lock must be held by caller)
+    pub fn address_space(&self) -> MutexGuard<Option<AddressSpace>> {
+        self.address_space.lock()
     }
 
     /// Add a thread to the process

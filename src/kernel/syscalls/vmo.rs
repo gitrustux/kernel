@@ -232,7 +232,7 @@ pub fn sys_vmo_create_impl(size: usize, options: u32) -> SyscallRet {
     // Convert options to VMO flags
     let flags = match options {
         0 => VmoFlags::RESIZABLE,
-        1 => VmoFlags::empty(),
+        1 => VmoFlags::empty,
         _ => {
             log_error!("sys_vmo_create: invalid options {}", options);
             return err_to_ret(RX_ERR_INVALID_ARGS);

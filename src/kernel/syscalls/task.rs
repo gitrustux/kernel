@@ -132,7 +132,7 @@ unsafe impl Send for ThreadRegistry {}
 unsafe impl Sync for ThreadRegistry {}
 
 /// Global thread registry
-static THREAD_REGISTRY: ThreadRegistry = ThreadRegistry::new();
+static mut THREAD_REGISTRY: ThreadRegistry = ThreadRegistry::new();
 
 /// ============================================================================
 /// Syscall: Thread Create
@@ -189,22 +189,29 @@ pub fn sys_thread_create_impl(
 
         // Convert to string (simplified - remove null bytes)
         // In a real implementation, we'd handle this better
-        String::from_utf8_lossy(&name_buf).to_string()
+        String::from_utf8_lossy(&name_buf).into_owned()
     } else {
         String::from("anonymous")
     };
 
     // Create the thread
+    // TODO: Get entry_point, stack_top, and priority from syscall arguments
     let thread = match Thread::new(
-        0, // process_id - TODO: get from handle
-        thread_name,
+        0, // entry_point - TODO: get from syscall args
+        0, // arg - TODO: get from syscall args
+        0, // stack_top - TODO: allocate or get from syscall args
+        crate::kernel::thread::PRIORITY_DEFAULT,
     ) {
         Ok(t) => t,
         Err(err) => {
             log_error!("sys_thread_create: failed to create thread: {:?}", err);
-            return err_to_ret(err);
+            return err_to_ret(err as i32);
         }
     };
+
+    // Set thread name (leak the string to get &'static str)
+    let leaked_name: &'static str = Box::leak(thread_name.into_boxed_str());
+    *thread.name.lock() = Some(leaked_name);
 
     log_debug!("sys_thread_create: created thread tid={}", thread.tid());
 
@@ -212,13 +219,13 @@ pub fn sys_thread_create_impl(
     let thread_arc = Arc::new(thread);
 
     // Insert into thread registry
-    let tid = match THREAD_REGISTRY.insert(thread_arc.clone()) {
+    let tid = unsafe { match THREAD_REGISTRY.insert(thread_arc.clone()) {
         Ok(id) => id,
         Err(err) => {
             log_error!("sys_thread_create: failed to insert thread: {:?}", err);
             return err_to_ret(err);
         }
-    };
+    }};
 
     // TODO: Add thread to process's thread list
 
@@ -261,7 +268,7 @@ pub fn sys_thread_start_impl(
     // TODO: Implement proper handle lookup
     let tid = thread_handle as ThreadId;
 
-    let thread = match THREAD_REGISTRY.get(tid) {
+    let thread = match unsafe { THREAD_REGISTRY.get(tid) } {
         Some(t) => t,
         None => {
             log_error!("sys_thread_start: thread not found");
@@ -280,7 +287,7 @@ pub fn sys_thread_start_impl(
         }
         Err(err) => {
             log_error!("sys_thread_start: failed to start thread: {:?}", err);
-            err_to_ret(err)
+            err_to_ret(err as i32)
         }
     }
 }
@@ -370,7 +377,7 @@ pub fn sys_process_create_impl(
             }
         }
 
-        String::from_utf8_lossy(&name_buf).to_string()
+        String::from_utf8_lossy(&name_buf).into_owned()
     } else {
         String::from("anonymous")
     };
@@ -381,7 +388,7 @@ pub fn sys_process_create_impl(
         Ok(p) => p,
         Err(err) => {
             log_error!("sys_process_create: failed to create process: {:?}", err);
-            return err_to_ret(err);
+            return err_to_ret(err as i32);
         }
     };
 
@@ -400,7 +407,7 @@ pub fn sys_process_create_impl(
         }
         Err(err) => {
             log_error!("sys_process_create: failed to insert process: {:?}", err);
-            err_to_ret(err)
+            err_to_ret(err as i32)
         }
     }
 }
@@ -450,7 +457,7 @@ pub fn sys_process_start_impl(
     // Start the initial thread
     let tid = thread_handle as ThreadId;
 
-    let thread = match THREAD_REGISTRY.get(tid) {
+    let thread = match unsafe { THREAD_REGISTRY.get(tid) } {
         Some(t) => t,
         None => {
             log_error!("sys_process_start: thread not found");
@@ -465,7 +472,7 @@ pub fn sys_process_start_impl(
         }
         Err(err) => {
             log_error!("sys_process_start: failed to start thread: {:?}", err);
-            err_to_ret(err)
+            err_to_ret(err as i32)
         }
     }
 }
@@ -535,7 +542,7 @@ pub fn sys_task_kill_impl(task_handle: u32) -> SyscallRet {
     // Try to interpret as thread handle
     let tid = task_handle as ThreadId;
 
-    if let Some(thread) = THREAD_REGISTRY.get(tid) {
+    if let Some(thread) = unsafe { THREAD_REGISTRY.get(tid) } {
         // Kill the thread
         thread.exit(0); // TODO: proper exit code
 
@@ -610,7 +617,7 @@ pub fn sys_job_create_impl(parent_job: u32, options: u32) -> SyscallRet {
 /// Get task subsystem statistics
 pub fn get_stats() -> TaskStats {
     TaskStats {
-        total_threads: THREAD_REGISTRY.count(),
+        total_threads: unsafe { THREAD_REGISTRY.count() },
         total_processes: process::MAX_PROCESSES, // Placeholder
         active_processes: 0,                      // TODO: Track active processes
     }
@@ -657,10 +664,10 @@ mod tests {
         let thread = Thread::new(0, String::from("test")).unwrap();
         let thread_arc = Arc::new(thread);
 
-        let tid = THREAD_REGISTRY.insert(thread_arc.clone()).unwrap();
+        let tid = unsafe { THREAD_REGISTRY.insert(thread_arc.clone()).unwrap() };
         assert_eq!(tid, thread_arc.tid());
 
-        let retrieved = THREAD_REGISTRY.get(tid).unwrap();
+        let retrieved = unsafe { THREAD_REGISTRY.get(tid).unwrap() };
         assert_eq!(retrieved.tid(), thread_arc.tid());
     }
 

@@ -295,10 +295,11 @@ pub unsafe fn pci_scan_bus(
     for device in 0..PCIE_MAX_DEVICES_PER_BUS {
         for func in 0..PCIE_MAX_FUNCTIONS_PER_DEVICE {
             if let Some(dev) = pci_scan_function(ecam_base, bus, device, func) {
+                // If not multifunction, skip to next device
+                let is_multifunction = dev.is_multifunction;
                 devices.push(dev);
 
-                // If not multifunction, skip to next device
-                if func == 0 && !dev.is_multifunction {
+                if func == 0 && !is_multifunction {
                     break;
                 }
             } else if func == 0 {

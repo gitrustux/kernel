@@ -63,11 +63,10 @@ impl SpinLock {
 }
 
 /// Saves the current interrupt state and disables interrupts.
-pub fn interrupt_save(state: &mut SpinLockSavedState, flags: SpinLockSaveFlags) {
-  // Assuming the functionality of saving and disabling interrupts.
-  // This is architecture-specific and would need implementation.
-  *state = unsafe { /* Function to save CPU flags */ };
-  // Disable interrupts
+pub fn interrupt_save(state: &mut SpinLockSavedState, _flags: SpinLockSaveFlags) {
+  // Save CPU flags (RFLAGS on x86_64)
+  // In a real implementation, this would use inline assembly to read RFLAGS
+  *state = unsafe { crate::kernel::arch::amd64::arch::arch_disable_ints() as usize };
 }
 
 /// Restores the previous interrupt state.

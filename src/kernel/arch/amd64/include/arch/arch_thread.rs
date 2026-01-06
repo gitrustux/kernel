@@ -216,7 +216,7 @@ pub unsafe fn arch_thread_initialize(thread: &mut crate::kernel::thread::Thread,
     core::ptr::write_bytes(frame_ptr, 0, 1);
 
     // Set the entry point
-    (*frame_ptr).rip = entry_point;
+    (*frame_ptr).rip = entry_point as u64;
 
     // Initialize extended register state (FPU/SSE/AVX)
     let arch_state = &mut thread.arch;
@@ -312,7 +312,7 @@ pub unsafe fn arch_context_switch(
     x86_debug_state_context_switch(old_thread, new_thread);
 
     // Set the TSS SP0 value to point at the top of the new thread's stack
-    mmu::x86_set_tss_sp(new_thread.stack_top());
+    mmu::x86_set_tss_sp(new_thread.stack_top() as u64);
 
     // Save the user fs_base register value
     let fs_base = if crate::kernel::arch::amd64::feature::g_x86_feature_fsgsbase() {
@@ -320,7 +320,7 @@ pub unsafe fn arch_context_switch(
     } else {
         mmu::x86_read_msr(X86_MSR_IA32_FS_BASE)
     };
-    old_thread.arch.fs_base = fs_base;
+    old_thread.arch.fs_base = fs_base as VAddr;
 
     // Reset segment selectors to prevent values from leaking between processes
     // Segment selectors get clobbered when returning from interrupts, so we reset them here
@@ -349,12 +349,12 @@ pub unsafe fn arch_context_switch(
             inlateout(reg) old_gs_base,
             in(reg) new_thread.arch.gs_base
         );
-        old_thread.arch.gs_base = old_gs_base;
+        old_thread.arch.gs_base = old_gs_base as VAddr;
 
-        _writefsbase_u64(new_thread.arch.fs_base);
+        _writefsbase_u64(new_thread.arch.fs_base as u64);
     } else {
         // Fall back to MSR access
-        old_thread.arch.gs_base = mmu::x86_read_msr(msr::IA32_KERNEL_GS_BASE);
+        old_thread.arch.gs_base = mmu::x86_read_msr(msr::IA32_KERNEL_GS_BASE) as VAddr;
         mmu::x86_write_msr(msr::IA32_FS_BASE, new_thread.arch.fs_base as u64);
         mmu::x86_write_msr(msr::IA32_KERNEL_GS_BASE, new_thread.arch.gs_base as u64);
     }

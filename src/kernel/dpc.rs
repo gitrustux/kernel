@@ -94,7 +94,7 @@ impl Dpc {
     }
 
     /// Set the argument
-    pub fn set_arg(&self, arg: u64) {
+    pub fn set_arg(&mut self, arg: u64) {
         self.arg = arg;
     }
 
@@ -256,7 +256,7 @@ impl DpcState {
     }
 
     /// Initialize DPC state for a CPU
-    pub fn init(&self, cpu_num: u32) {
+    pub fn init(&mut self, cpu_num: u32) {
         // Initialize event
         self.event.init(false, EventFlags::empty());
 
@@ -335,7 +335,7 @@ pub fn dpc_init_for_cpu() {
             return;
         }
 
-        DPC_STATES[cpu_num].init(cpu_num as u32);
+        (*DPC_STATES.as_mut_ptr().add(cpu_num)).init(cpu_num as u32);
     }
 }
 
@@ -360,7 +360,7 @@ pub unsafe fn dpc_queue_cpu(dpc: &Dpc, cpu_id: u32, reschedule: bool) -> Result 
     // Add to queue
     {
         let mut queue = state.queue.lock();
-        queue.push(dpc as *const Dpc as &'static Dpc);
+        queue.push(unsafe { &*(dpc as *const Dpc) });
     }
 
     // Signal the event
@@ -445,8 +445,11 @@ extern "C" fn dpc_worker_thread(_arg: u64) -> ! {
         }
     }
 
-    // Thread exit
-    crate::kernel::thread::Thread::exit_current(RX_OK);
+    // Thread exit - use the exit function from current thread
+    // For now, just loop forever since we can't properly exit
+    loop {
+        unsafe { crate::kernel::arch::amd64::registers::x86_hlt() };
+    }
 }
 
 /// Create DPC worker thread

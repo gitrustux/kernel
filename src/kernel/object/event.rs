@@ -112,7 +112,7 @@ impl Event {
     ///
     /// * `signaled` - Initial signal state
     /// * `flags` - Event flags
-    pub const fn new(signaled: bool, flags: EventFlags) -> Self {
+    pub fn new(signaled: bool, flags: EventFlags) -> Self {
         Self {
             id: alloc_event_id(),
             signaled: AtomicBool::new(signaled),

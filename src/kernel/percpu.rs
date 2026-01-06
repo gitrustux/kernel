@@ -168,7 +168,7 @@ struct AlignedPerCpuArray {
 ///
 /// This is aligned to cache line boundaries to prevent false sharing.
 static mut PERCPU_DATA: AlignedPerCpuArray = AlignedPerCpuArray {
-    data: [PerCpu::zeroed(); SMP_MAX_CPUS],
+    data: unsafe { core::mem::zeroed() },
 };
 
 /// Number of initialized CPUs

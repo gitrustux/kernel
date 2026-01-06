@@ -179,7 +179,7 @@ pub fn arch_smc_call_impl(params: usize, result: usize) -> SyscallRet {
     }
 
     // Copy parameters from user
-    let user_params_ptr = crate::kernel::usercopy::UserPtr::<SmcParameters>::new(params);
+    let user_params_ptr = crate::kernel::usercopy::UserPtr::<u8>::new(params);
     let smc_params = unsafe {
         let mut p = SmcParameters::default();
         if let Err(err) = crate::kernel::usercopy::copy_from_user(
@@ -218,11 +218,11 @@ pub fn arch_smc_call_impl(params: usize, result: usize) -> SyscallRet {
     };
 
     // Copy result to user
-    let user_result_ptr = crate::kernel::usercopy::UserPtr::<SmcResult>::new(result);
+    let user_result_ptr = crate::kernel::usercopy::UserPtr::<u8>::new(result);
     unsafe {
         if let Err(err) = crate::kernel::usercopy::copy_to_user(
             user_result_ptr,
-            &smc_result as *const SmcResult,
+            &smc_result as *const SmcResult as *const u8,
             1,
         ) {
             log_error!("arch_smc_call_arm64: copy_to_user failed: {:?}", err);

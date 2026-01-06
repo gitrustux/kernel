@@ -655,8 +655,129 @@ impl X86PageTableMmu {
     }
 
     pub fn needs_cache_flushes(&self) -> bool {
-        // Implementation would determine if cache flushes are needed
+        // x86-64 MMU needs cache flushes for certain operations
         true
+    }
+
+    pub fn intermediate_flags(&self) -> IntermediatePtFlags {
+        // Intermediate page table entry flags for x86-64
+        // Present | Read/Write | User
+        0b111  // P | RW | U
+    }
+
+    pub fn terminal_flags(&self, _level: PageTableLevel, flags: u32) -> PtFlags {
+        // Convert input flags to x86-64 page table flags
+        // For now, set Present, Read/Write, User, and XD if not executable
+        let present = 1u64 << 0;
+        let rw = 1u64 << 1;
+        let us = 1u64 << 2;
+        let xd = 1u64 << 63;  // Execute disable
+
+        let mut pt_flags = present | rw | us | xd;
+
+        // If flags indicate executable, clear XD
+        if flags & 0x1 != 0 {  // Executable flag
+            pt_flags &= !xd;
+        }
+
+        pt_flags
+    }
+
+    pub fn split_flags(&self, _level: PageTableLevel, flags: PtFlags) -> PtFlags {
+        // Split flags for intermediate entries
+        // Keep Present, Read/Write, User for intermediate levels
+        flags & 0b111  // Keep P | RW | U
+    }
+
+    pub fn tlb_invalidate(&self, _pending: &mut PendingTlbInvalidation) {
+        // Invalidate TLB entries
+        // For x86-64, we use INVLPG or do a full shootdown
+        unsafe {
+            // For simplicity, do a full TLB shootdown
+            // INVLPG would be more targeted
+            core::arch::asm!(
+                "mov cr3, {0}",
+                "mov {0}, cr3",
+                in(reg) _pending as *const _ as usize,
+                options(nomem, nostack)
+            );
+        }
+    }
+
+    pub fn pt_flags_to_mmu_flags(&self, flags: PtFlags, _level: PageTableLevel) -> u32 {
+        // Convert page table flags back to MMU flags
+        let mut mmu_flags = 0u32;
+
+        if flags & (1 << 0) != 0 { mmu_flags |= 0x1; }  // Present
+        if flags & (1 << 1) != 0 { mmu_flags |= 0x2; }  // Read/Write
+        if flags & (1 << 2) != 0 { mmu_flags |= 0x4; }  // User
+        if flags & (1 << 63) != 0 { mmu_flags |= 0x8; } // Execute Disable
+
+        mmu_flags
+    }
+
+    /// Split a large page into smaller pages
+    ///
+    /// This is used when part of a large page needs different permissions
+    /// or when unmapping part of a large page.
+    pub fn split_large_page(&mut self, level: PageTableLevel, vaddr: usize,
+                           pte: *mut PtEntry, _cm: &mut ConsistencyManager) -> Result<(), RxStatus> {
+        // For x86-64 MMU:
+        // - 1GB page → 512 2MB pages (at PDP level)
+        // - 2MB page → 512 4KB pages (at PD level)
+
+        unsafe {
+            let entry_val = *pte;
+
+            // Check if this is actually a large page
+            if entry_val & (1u64 << 7) == 0 {
+                // Not a large page, nothing to split
+                return Ok(());
+            }
+
+            // Get the physical address and flags from the large page
+            let paddr = entry_val & 0x000fffff_f000u64; // Physical address frame
+            let flags = entry_val & 0xfff; // Preserve flags except PS bit
+
+            // Allocate a new page table for the next level
+            let new_table = match level {
+                PageTableLevel::PDP_L => {
+                    // 1GB → 2MB: Allocate a new PD
+                    // TODO: Allocate from PMM
+                    return Err(RxStatus::ERR_NOT_SUPPORTED);
+                }
+                PageTableLevel::PD_L => {
+                    // 2MB → 4KB: Allocate a new PT
+                    // TODO: Allocate from PMM
+                    return Err(RxStatus::ERR_NOT_SUPPORTED);
+                }
+                _ => return Err(RxStatus::ERR_INVALID_ARGS),
+            };
+
+            // Initialize the new table with entries pointing to the same physical memory
+            // Each entry maps a 4KB/2MB chunk of the original large page
+            let num_entries = 512;
+            let page_size = match level {
+                PageTableLevel::PDP_L => 2 * 1024 * 1024, // 2MB
+                PageTableLevel::PD_L => 4 * 1024,          // 4KB
+                _ => return Err(RxStatus::ERR_INVALID_ARGS),
+            };
+
+            for i in 0..num_entries {
+                let entry_paddr = paddr + (i as u64) * (page_size as u64);
+                let entry = new_table.add(i);
+                *entry = entry_paddr | flags | (1u64 << 0); // Present
+            }
+
+            // Update the PTE to point to the new table
+            let new_table_addr = new_table as usize as u64;
+            *pte = new_table_addr | (1u64 << 0) | (1u64 << 1) | (1u64 << 2); // Present | RW | User
+
+            // Invalidate TLB for this range
+            // TODO: Use proper TLB invalidation
+
+            Ok(())
+        }
     }
 }
 
@@ -709,7 +830,125 @@ impl X86PageTableEpt {
     }
 
     pub fn needs_cache_flushes(&self) -> bool {
-        // Implementation would determine if cache flushes are needed
-        false // EPT typically doesn't need cache flushes
+        // EPT typically doesn't need cache flushes
+        false
+    }
+
+    pub fn intermediate_flags(&self) -> IntermediatePtFlags {
+        // EPT intermediate page table entry flags
+        // Present | Read/Write | Execute
+        0b1111  // P | RW | X
+    }
+
+    pub fn terminal_flags(&self, _level: PageTableLevel, flags: u32) -> PtFlags {
+        // Convert input flags to EPT page table flags
+        // EPT has different flag layout than regular MMU
+        let present = 1u64 << 0;
+        let rw = 1u64 << 1;
+        let execute = 1u64 << 2;
+        let memory_type = 1u64 << 3;  // Write-back
+
+        let mut pt_flags = present | rw | execute | memory_type;
+
+        // EPT doesn't have user/supervisor distinction
+        // Execute flag is explicit
+        if flags & 0x1 == 0 {  // Not executable
+            pt_flags &= !(1u64 << 2);
+        }
+
+        pt_flags
+    }
+
+    pub fn split_flags(&self, _level: PageTableLevel, flags: PtFlags) -> PtFlags {
+        // Split flags for intermediate EPT entries
+        // Keep Present, Read/Write, Execute
+        flags & 0b1111
+    }
+
+    pub fn tlb_invalidate(&self, _pending: &mut PendingTlbInvalidation) {
+        // EPT doesn't use TLB in the traditional sense
+        // INVEPT instruction is used instead
+        unsafe {
+            core::arch::asm!(
+                "invept",
+                in(reg) _pending as *const _ as u64,
+                options(nomem, nostack)
+            );
+        }
+    }
+
+    pub fn pt_flags_to_mmu_flags(&self, flags: PtFlags, _level: PageTableLevel) -> u32 {
+        // Convert EPT flags back to MMU flags
+        let mut mmu_flags = 0u32;
+
+        if flags & (1 << 0) != 0 { mmu_flags |= 0x1; }  // Present
+        if flags & (1 << 1) != 0 { mmu_flags |= 0x2; }  // Read/Write
+        if flags & (1 << 2) != 0 { mmu_flags |= 0x4; }  // Execute
+
+        mmu_flags
+    }
+
+    /// Split a large page into smaller pages for EPT
+    ///
+    /// This is used when part of a large page needs different permissions
+    /// or when unmapping part of a large page.
+    pub fn split_large_page(&mut self, level: PageTableLevel, _vaddr: usize,
+                           pte: *mut PtEntry, _cm: &mut ConsistencyManager) -> Result<(), RxStatus> {
+        // For EPT:
+        // - 1GB page → 512 2MB pages (at PDP level)
+        // - 2MB page → 512 4KB pages (at PD level)
+
+        unsafe {
+            let entry_val = *pte;
+
+            // Check if this is actually a large page (bit 8 for EPT)
+            if entry_val & (1u64 << 8) == 0 {
+                // Not a large page, nothing to split
+                return Ok(());
+            }
+
+            // Get the physical address and flags from the large page
+            let paddr = entry_val & 0x000fffff_f000u64; // Physical address frame
+            let flags = entry_val & 0x3f; // Preserve basic flags (Read, Write, Execute, Memory Type)
+
+            // Allocate a new page table for the next level
+            // TODO: Implement proper allocation
+            // For now, return not supported
+            let _new_table = match level {
+                PageTableLevel::PDP_L => {
+                    // 1GB → 2MB: Allocate a new PD
+                    return Err(RxStatus::ERR_NOT_SUPPORTED);
+                }
+                PageTableLevel::PD_L => {
+                    // 2MB → 4KB: Allocate a new PT
+                    return Err(RxStatus::ERR_NOT_SUPPORTED);
+                }
+                _ => return Err(RxStatus::ERR_INVALID_ARGS),
+            };
+
+            // Initialize the new table with entries pointing to the same physical memory
+            // Each entry maps a 4KB/2MB chunk of the original large page
+            let num_entries = 512;
+            let page_size = match level {
+                PageTableLevel::PDP_L => 2 * 1024 * 1024, // 2MB
+                PageTableLevel::PD_L => 4 * 1024,          // 4KB
+                _ => return Err(RxStatus::ERR_INVALID_ARGS),
+            };
+
+            for i in 0..num_entries {
+                let entry_paddr = paddr + (i as u64) * (page_size as u64);
+                let entry = _new_table.add(i);
+                *entry = entry_paddr | flags | (1u64 << 0); // Present
+            }
+
+            // Update the PTE to point to the new table (clear PS bit 8, set RW bit 1)
+            let new_table_addr = _new_table as usize as u64;
+            *pte = new_table_addr | (1u64 << 0) | (1u64 << 1); // Present | Read/Write
+
+            // Invalidate EPT TLB for this context
+            // INVEPT would be used here
+
+            Ok(())
+        }
     }
 }

@@ -283,7 +283,7 @@ pub fn sys_system_powerctl_impl(resource_handle: u32, cmd: u32, arg: usize) -> S
 
         PowerctlCmd::AcpiTransitionSState => {
             // Read S-state from user argument
-            let user_ptr = UserPtr::<u32>::new(arg);
+            let user_ptr = UserPtr::<u8>::new(arg);
 
             let mut s_state = 0u32;
             unsafe {
@@ -300,7 +300,7 @@ pub fn sys_system_powerctl_impl(resource_handle: u32, cmd: u32, arg: usize) -> S
 
         PowerctlCmd::X86SetPkgPl1 => {
             // Read PL1 value from user argument
-            let user_ptr = UserPtr::<u32>::new(arg);
+            let user_ptr = UserPtr::<u8>::new(arg);
 
             let mut pl1 = 0u32;
             unsafe {

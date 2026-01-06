@@ -238,7 +238,7 @@ pub unsafe fn copy_string_from_user(
     // Find the string length by looking for null terminator
     let mut len = 0;
     while len < max_len {
-        let byte = *(src.addr().add(len) as *const u8);
+        let byte = *((src.addr() + len) as *const u8);
         if byte == 0 {
             break;
         }

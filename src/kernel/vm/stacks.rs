@@ -68,7 +68,7 @@ pub const GUARD_PAGES: usize = 1;
 
 /// Kernel stack information
 #[repr(C)]
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct KernelStack {
     /// Virtual address of the stack top (initial SP)
     pub top: VAddr,
@@ -141,7 +141,7 @@ impl KernelStack {
 
 /// Stack allocator statistics
 #[repr(C)]
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct StackStats {
     /// Total stacks allocated
     pub total_stacks: u64,
@@ -214,7 +214,10 @@ impl StackAllocator {
 
         // Allocate physical pages (including guard page)
         let num_pages = total_size / PAGE_SIZE;
-        let phys_base = pmm::pmm_alloc_contiguous(num_pages, pmm::PMM_ALLOC_FLAG_ANY, 12)?;
+        let phys_base = match pmm::pmm_alloc_contiguous(num_pages, pmm::PMM_ALLOC_FLAG_ANY, 12) {
+            Ok(addr) => addr,
+            Err(_) => return Err(VmError::NoMemory),
+        };
 
         // Map the stack into kernel address space
         // Note: This requires access to the kernel address space
@@ -223,7 +226,7 @@ impl StackAllocator {
             stack_top,
             stack_base,
             size,
-            phys_base,
+            phys_base as usize,
             num_pages,
             guard_vaddr,
             owner_id,
@@ -252,7 +255,7 @@ impl StackAllocator {
     pub fn free_stack(&self, stack: KernelStack) {
         // Free physical pages
         for i in 0..stack.num_pages {
-            let paddr = stack.phys_base + (i * PAGE_SIZE);
+            let paddr = (stack.phys_base + (i * PAGE_SIZE)) as u64;
             pmm::pmm_free_page(paddr);
         }
 
@@ -271,7 +274,7 @@ impl StackAllocator {
 
     /// Get allocator statistics
     pub fn stats(&self) -> StackStats {
-        *self.stats.lock()
+        self.stats.lock().clone()
     }
 }
 

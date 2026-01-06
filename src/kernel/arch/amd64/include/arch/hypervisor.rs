@@ -224,6 +224,8 @@ impl Vcpu {
     /// Handles an interrupt.
     fn interrupt(&mut self, vector: u32, type_: InterruptType) -> cpu_mask_t {
         // Implement interrupt handling logic.
+        // For now, return 0 indicating no CPUs were targeted
+        0
     }
 
     /// Sends a virtual interrupt.

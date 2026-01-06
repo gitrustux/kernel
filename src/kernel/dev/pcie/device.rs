@@ -60,7 +60,19 @@ impl PciBar {
 
     /// Get the virtual address for this BAR
     pub fn virt_addr(&self) -> VAddr {
-        unsafe { crate::kernel::arch::arch_traits::ArchMMU::phys_to_virt(self.base as PAddr) as VAddr }
+        // Use the kernel physmap to convert physical to virtual address
+        #[cfg(target_arch = "x86_64")]
+        unsafe {
+            crate::kernel::vm::phys_to_physmap(self.base as usize) as VAddr
+        }
+        #[cfg(target_arch = "aarch64")]
+        unsafe {
+            crate::kernel::vm::phys_to_physmap(self.base as usize) as VAddr
+        }
+        #[cfg(target_arch = "riscv64")]
+        unsafe {
+            crate::kernel::vm::phys_to_physmap(self.base as usize) as VAddr
+        }
     }
 }
 

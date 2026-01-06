@@ -94,9 +94,9 @@ pub unsafe fn read_msr_safe(msr_id: u32, val_out: *mut u64) -> i32 {
     let low: u32;
     let high: u32;
     core::arch::asm!(
-        ".Lmsr_read_start:",
+        "2:",
         "rdmsr",
-        ".Lmsr_read_end:",
+        "2b:",
         in("ecx") msr_id,
         lateout("eax") low,
         lateout("edx") high,

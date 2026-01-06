@@ -444,17 +444,17 @@ fn single_record_result(
 
     // Write actual
     if actual_out != 0 {
-        let user_ptr = UserPtr::<usize>::new(actual_out);
+        let user_ptr = UserPtr::<u8>::new(actual_out);
         unsafe {
-            copy_to_user(user_ptr, &actual as *const usize as *const u8, core::mem::size_of::<usize>())?;
+            copy_to_user(user_ptr, &actual as *const _ as *const u8, core::mem::size_of::<usize>())?;
         }
     }
 
     // Write avail
     if avail_out != 0 {
-        let user_ptr = UserPtr::<usize>::new(avail_out);
+        let user_ptr = UserPtr::<u8>::new(avail_out);
         unsafe {
-            copy_to_user(user_ptr, &avail as *const usize as *const u8, core::mem::size_of::<usize>())?;
+            copy_to_user(user_ptr, &avail as *const _ as *const u8, core::mem::size_of::<usize>())?;
         }
     }
 
@@ -555,11 +555,11 @@ pub fn sys_object_get_info_impl(
             let num_threads = 0usize;
 
             if actual_out != 0 {
-                let user_ptr = UserPtr::<usize>::new(actual_out);
+                let user_ptr = UserPtr::<u8>::new(actual_out);
                 unsafe {
                     if let Err(err) = copy_to_user(
                         user_ptr,
-                        &num_threads as *const usize as *const u8,
+                        &num_threads as *const _ as *const u8,
                         core::mem::size_of::<usize>(),
                     ) {
                         return err_to_ret(err.into());
@@ -568,11 +568,11 @@ pub fn sys_object_get_info_impl(
             }
 
             if avail_out != 0 {
-                let user_ptr = UserPtr::<usize>::new(avail_out);
+                let user_ptr = UserPtr::<u8>::new(avail_out);
                 unsafe {
                     if let Err(err) = copy_to_user(
                         user_ptr,
-                        &num_threads as *const usize as *const u8,
+                        &num_threads as *const _ as *const u8,
                         core::mem::size_of::<usize>(),
                     ) {
                         return err_to_ret(err.into());
@@ -703,11 +703,11 @@ pub fn sys_object_get_info_impl(
             // For now, return empty
             if actual_out != 0 {
                 let count = 0usize;
-                let user_ptr = UserPtr::<usize>::new(actual_out);
+                let user_ptr = UserPtr::<u8>::new(actual_out);
                 unsafe {
                     if let Err(err) = copy_to_user(
                         user_ptr,
-                        &count as *const usize as *const u8,
+                        &count as *const _ as *const u8,
                         core::mem::size_of::<usize>(),
                     ) {
                         return err_to_ret(err.into());
@@ -717,11 +717,11 @@ pub fn sys_object_get_info_impl(
 
             if avail_out != 0 {
                 let avail = 0usize;
-                let user_ptr = UserPtr::<usize>::new(avail_out);
+                let user_ptr = UserPtr::<u8>::new(avail_out);
                 unsafe {
                     if let Err(err) = copy_to_user(
                         user_ptr,
-                        &avail as *const usize as *const u8,
+                        &avail as *const _ as *const u8,
                         core::mem::size_of::<usize>(),
                     ) {
                         return err_to_ret(err.into());
@@ -892,7 +892,7 @@ pub fn sys_object_get_property_impl(
 
             // TODO: Get actual debug address
             let debug_addr = 0u64;
-            let user_ptr = UserPtr::<u64>::new(value);
+            let user_ptr = UserPtr::<u8>::new(value);
             unsafe {
                 if let Err(err) = copy_to_user(user_ptr, &debug_addr as *const u64 as *const u8, 8) {
                     return err_to_ret(err.into());
@@ -909,7 +909,7 @@ pub fn sys_object_get_property_impl(
 
             // TODO: Get actual VDSO base address
             let vdso_base = 0u64;
-            let user_ptr = UserPtr::<u64>::new(value);
+            let user_ptr = UserPtr::<u8>::new(value);
             unsafe {
                 if let Err(err) = copy_to_user(user_ptr, &vdso_base as *const u64 as *const u8, 8) {
                     return err_to_ret(err.into());
@@ -926,7 +926,7 @@ pub fn sys_object_get_property_impl(
 
             // TODO: Get actual socket RX threshold
             let threshold = 0u64;
-            let user_ptr = UserPtr::<u64>::new(value);
+            let user_ptr = UserPtr::<u8>::new(value);
             unsafe {
                 if let Err(err) = copy_to_user(user_ptr, &threshold as *const u64 as *const u8, 8) {
                     return err_to_ret(err.into());
@@ -943,7 +943,7 @@ pub fn sys_object_get_property_impl(
 
             // TODO: Get actual socket TX threshold
             let threshold = 0u64;
-            let user_ptr = UserPtr::<u64>::new(value);
+            let user_ptr = UserPtr::<u8>::new(value);
             unsafe {
                 if let Err(err) = copy_to_user(user_ptr, &threshold as *const u64 as *const u8, 8) {
                     return err_to_ret(err.into());
@@ -1011,7 +1011,7 @@ pub fn sys_object_set_property_impl(
             }
 
             // TODO: Set actual name on object
-            log_debug!("sys_object_set_property: set name to {}", {
+            log_debug!("sys_object_set_property: set name to {}", unsafe {
                 let len = copy_size.min(MAX_NAME_LEN - 1);
                 core::str::from_utf8_unchecked(&name[..len])
             });
@@ -1025,7 +1025,7 @@ pub fn sys_object_set_property_impl(
             }
 
             let mut debug_addr = 0u64;
-            let user_ptr = UserPtr::<u64>::new(value);
+            let user_ptr = UserPtr::<u8>::new(value);
             unsafe {
                 if let Err(err) = copy_from_user(&mut debug_addr as *mut u64 as *mut u8, user_ptr, 8) {
                     return err_to_ret(err.into());
@@ -1044,7 +1044,7 @@ pub fn sys_object_set_property_impl(
             }
 
             let mut threshold = 0u64;
-            let user_ptr = UserPtr::<u64>::new(value);
+            let user_ptr = UserPtr::<u8>::new(value);
             unsafe {
                 if let Err(err) = copy_from_user(&mut threshold as *mut u64 as *mut u8, user_ptr, 8) {
                     return err_to_ret(err.into());
@@ -1063,7 +1063,7 @@ pub fn sys_object_set_property_impl(
             }
 
             let mut threshold = 0u64;
-            let user_ptr = UserPtr::<u64>::new(value);
+            let user_ptr = UserPtr::<u8>::new(value);
             unsafe {
                 if let Err(err) = copy_from_user(&mut threshold as *mut u64 as *mut u8, user_ptr, 8) {
                     return err_to_ret(err.into());
@@ -1082,7 +1082,7 @@ pub fn sys_object_set_property_impl(
             }
 
             let mut kill_on_oom = 0u64;
-            let user_ptr = UserPtr::<u64>::new(value);
+            let user_ptr = UserPtr::<u8>::new(value);
             unsafe {
                 if let Err(err) = copy_from_user(&mut kill_on_oom as *mut u64 as *mut u8, user_ptr, 8) {
                     return err_to_ret(err.into());
@@ -1274,7 +1274,7 @@ pub fn sys_object_get_cookie_impl(
     let cookie = 0u64;
 
     // Copy to user
-    let user_ptr = UserPtr::<u64>::new(cookie_out);
+    let user_ptr = UserPtr::<u8>::new(cookie_out);
     unsafe {
         if let Err(err) = copy_to_user(user_ptr, &cookie as *const u64 as *const u8, 8) {
             log_error!("sys_object_get_cookie: copy_to_user failed: {:?}", err);

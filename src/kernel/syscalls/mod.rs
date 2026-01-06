@@ -704,8 +704,8 @@ fn record_syscall(num: u32) {
 }
 
 /// Get syscall statistics
-pub fn get_syscall_stats() -> SyscallStats {
-    unsafe { SYSCALL_STATS }
+pub fn get_syscall_stats() -> &'static SyscallStats {
+    unsafe { &SYSCALL_STATS }
 }
 
 /// ============================================================================

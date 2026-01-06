@@ -216,7 +216,7 @@ impl FifoRegistry {
 }
 
 /// Global FIFO registry
-static FIFO_REGISTRY: FifoRegistry = FifoRegistry::new();
+static mut FIFO_REGISTRY: FifoRegistry = FifoRegistry::new();
 
 /// ============================================================================
 /// FIFO ID Allocation
@@ -290,20 +290,22 @@ pub fn sys_fifo_create_impl(
     fifo1.peer_id.store(id0, Ordering::Relaxed);
 
     // Insert into FIFO registry
-    if let Err(err) = FIFO_REGISTRY.insert(id0, fifo0.clone()) {
-        log_error!("sys_fifo_create: failed to insert fifo0: {:?}", err);
-        return err_to_ret(err);
-    }
+    unsafe {
+        if let Err(err) = FIFO_REGISTRY.insert(id0, fifo0.clone()) {
+            log_error!("sys_fifo_create: failed to insert fifo0: {:?}", err);
+            return err_to_ret(err);
+        }
 
-    if let Err(err) = FIFO_REGISTRY.insert(id1, fifo1.clone()) {
-        log_error!("sys_fifo_create: failed to insert fifo1: {:?}", err);
-        FIFO_REGISTRY.remove(id0);
-        return err_to_ret(err);
+        if let Err(err) = FIFO_REGISTRY.insert(id1, fifo1.clone()) {
+            log_error!("sys_fifo_create: failed to insert fifo1: {:?}", err);
+            FIFO_REGISTRY.remove(id0);
+            return err_to_ret(err);
+        }
     }
 
     // Write handles to user space
     if handle0_out != 0 {
-        let user_ptr = UserPtr::<u64>::new(handle0_out);
+        let user_ptr = UserPtr::<u8>::new(handle0_out);
         unsafe {
             if let Err(err) = copy_to_user(user_ptr, &id0 as *const u64 as *const u8, 8) {
                 log_error!("sys_fifo_create: copy_to_user failed for handle0: {:?}", err);
@@ -315,7 +317,7 @@ pub fn sys_fifo_create_impl(
     }
 
     if handle1_out != 0 {
-        let user_ptr = UserPtr::<u64>::new(handle1_out);
+        let user_ptr = UserPtr::<u8>::new(handle1_out);
         unsafe {
             if let Err(err) = copy_to_user(user_ptr, &id1 as *const u64 as *const u8, 8) {
                 log_error!("sys_fifo_create: copy_to_user failed for handle1: {:?}", err);
@@ -363,11 +365,13 @@ pub fn sys_fifo_write_impl(
 
     // Look up FIFO
     let fifo_id = handle_val as u64;
-    let fifo = match FIFO_REGISTRY.get(fifo_id) {
-        Some(f) => f,
-        None => {
-            log_error!("sys_fifo_write: FIFO not found");
-            return err_to_ret(RX_ERR_BAD_HANDLE);
+    let fifo = unsafe {
+        match FIFO_REGISTRY.get(fifo_id) {
+            Some(f) => f,
+            None => {
+                log_error!("sys_fifo_write: FIFO not found");
+                return err_to_ret(RX_ERR_BAD_HANDLE);
+            }
         }
     };
 
@@ -409,11 +413,11 @@ pub fn sys_fifo_write_impl(
 
     // Write actual count to user
     if actual_count_out != 0 {
-        let user_ptr = UserPtr::<usize>::new(actual_count_out);
+        let user_ptr = UserPtr::<u8>::new(actual_count_out);
         unsafe {
             if let Err(err) = copy_to_user(
                 user_ptr,
-                &actual_written as *const usize as *const u8,
+                &actual_written as *const _ as *const u8,
                 core::mem::size_of::<usize>(),
             ) {
                 log_error!("sys_fifo_write: copy_to_user failed: {:?}", err);
@@ -459,11 +463,13 @@ pub fn sys_fifo_read_impl(
 
     // Look up FIFO
     let fifo_id = handle_val as u64;
-    let fifo = match FIFO_REGISTRY.get(fifo_id) {
-        Some(f) => f,
-        None => {
-            log_error!("sys_fifo_read: FIFO not found");
-            return err_to_ret(RX_ERR_BAD_HANDLE);
+    let fifo = unsafe {
+        match FIFO_REGISTRY.get(fifo_id) {
+            Some(f) => f,
+            None => {
+                log_error!("sys_fifo_read: FIFO not found");
+                return err_to_ret(RX_ERR_BAD_HANDLE);
+            }
         }
     };
 
@@ -508,11 +514,11 @@ pub fn sys_fifo_read_impl(
 
     // Write actual count to user
     if actual_count_out != 0 {
-        let user_ptr = UserPtr::<usize>::new(actual_count_out);
+        let user_ptr = UserPtr::<u8>::new(actual_count_out);
         unsafe {
             if let Err(err) = copy_to_user(
                 user_ptr,
-                &actual_read as *const usize as *const u8,
+                &actual_read as *const _ as *const u8,
                 core::mem::size_of::<usize>(),
             ) {
                 log_error!("sys_fifo_read: copy_to_user failed: {:?}", err);
@@ -533,7 +539,7 @@ pub fn sys_fifo_read_impl(
 /// Get FIFO subsystem statistics
 pub fn get_stats() -> FifoStats {
     FifoStats {
-        total_fifos: FIFO_REGISTRY.count(),
+        total_fifos: unsafe { FIFO_REGISTRY.count() },
         total_bytes_queued: 0, // TODO: Track total bytes
     }
 }

@@ -136,7 +136,7 @@ impl EventRegistry {
 }
 
 /// Global event registry
-static EVENT_REGISTRY: EventRegistry = EventRegistry::new();
+static EVENT_REGISTRY: Mutex<EventRegistry> = Mutex::new(EventRegistry::new());
 
 /// ============================================================================
 /// EventPair Registry
@@ -281,7 +281,7 @@ fn lookup_event_from_handle(
     let event_id = handle.id as event::EventId;
 
     // Get event from registry
-    let event = EVENT_REGISTRY.get(event_id)
+    let event = EVENT_REGISTRY.lock().get(event_id)
         .ok_or(RX_ERR_NOT_FOUND)?;
 
     Ok((event, handle))
@@ -356,7 +356,7 @@ pub fn sys_event_create_impl(options: u32) -> SyscallRet {
     let flags = if (options & 0x02) != 0 {
         EventFlags::MANUAL_RESET
     } else {
-        EventFlags::empty()
+        EventFlags::empty
     };
 
     // Create the event
@@ -368,7 +368,7 @@ pub fn sys_event_create_impl(options: u32) -> SyscallRet {
     let event_arc = Arc::new(event);
 
     // Insert into event registry
-    let event_id = match EVENT_REGISTRY.insert(event_arc.clone()) {
+    let event_id = match EVENT_REGISTRY.lock().insert(event_arc.clone()) {
         Ok(id) => id,
         Err(err) => {
             log_error!("sys_event_create: failed to insert event into registry: {:?}", err);
@@ -523,7 +523,7 @@ pub fn sys_object_signal_impl(handle_val: u32, options: u32) -> SyscallRet {
 /// Get event subsystem statistics
 pub fn get_stats() -> EventStats {
     EventStats {
-        total_events: EVENT_REGISTRY.count(),
+        total_events: EVENT_REGISTRY.lock().count(),
         total_eventpairs: EVENTPAIR_REGISTRY.lock().count(),
         signaled_count: 0, // TODO: Track signaled events
     }
@@ -563,37 +563,37 @@ mod tests {
 
     #[test]
     fn test_event_registry_insert_get() {
-        let event = Event::new(false, EventFlags::empty());
+        let event = Event::new(false, EventFlags::empty);
         let event_arc = Arc::new(event);
 
-        let id = EVENT_REGISTRY.insert(event_arc.clone()).unwrap();
+        let id = EVENT_REGISTRY.lock().insert(event_arc.clone()).unwrap();
         assert_eq!(id, event_arc.id);
 
-        let retrieved = EVENT_REGISTRY.get(id).unwrap();
+        let retrieved = EVENT_REGISTRY.lock().get(id).unwrap();
         assert_eq!(retrieved.id, event_arc.id);
     }
 
     #[test]
     fn test_event_registry_remove() {
-        let event = Event::new(false, EventFlags::empty());
+        let event = Event::new(false, EventFlags::empty);
         let event_arc = Arc::new(event);
 
-        let id = EVENT_REGISTRY.insert(event_arc.clone()).unwrap();
-        let removed = EVENT_REGISTRY.remove(id).unwrap();
+        let id = EVENT_REGISTRY.lock().insert(event_arc.clone()).unwrap();
+        let removed = EVENT_REGISTRY.lock().remove(id).unwrap();
 
         assert_eq!(removed.id, event_arc.id);
-        assert!(EVENT_REGISTRY.get(id).is_none());
+        assert!(EVENT_REGISTRY.lock().get(id).is_none());
     }
 
     #[test]
     fn test_event_create_unsignaled() {
-        let event = Event::new(false, EventFlags::empty());
+        let event = Event::new(false, EventFlags::empty);
         assert!(!event.is_signaled());
     }
 
     #[test]
     fn test_event_create_signaled() {
-        let event = Event::new(true, EventFlags::empty());
+        let event = Event::new(true, EventFlags::empty);
         assert!(event.is_signaled());
     }
 

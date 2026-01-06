@@ -278,7 +278,7 @@ impl Timer {
     /// - Err(RX_ERR_CANCELED) if timer was canceled
     pub fn wait(&self) -> Result {
         // Wait on event
-        self.event.wait()?;
+        self.event.wait();
 
         // Check if timer was canceled
         if self.state() == TimerState::Canceled {

@@ -51,7 +51,7 @@ pub fn arch_ints_disabled() -> bool {
     unsafe {
         core::arch::asm!(
             "pushfq",
-            "popq {}",
+            "pop {}",
             out(reg) flags,
             options(nomem, preserves_flags)
         );

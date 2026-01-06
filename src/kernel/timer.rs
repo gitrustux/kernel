@@ -143,7 +143,7 @@ impl Timer {
     ///
     /// * `callback` - Function to call when timer fires
     /// * `arg` - Argument to pass to callback
-    pub fn set_callback(&self, callback: TimerCallback, arg: u64) {
+    pub fn set_callback(&mut self, callback: TimerCallback, arg: u64) {
         *self.callback.lock() = Some(callback);
         self.callback_arg = arg;
     }
@@ -324,9 +324,10 @@ pub fn timer_tick(current_time: u64) {
 ///
 /// * `timer` - Timer to insert
 pub fn insert_timer(timer: &Timer) {
+    let id = next_timer_id();
     let entry = TimerQueueEntry {
         deadline: timer.deadline(),
-        id: next_timer_id(),
+        id,
         timer: timer as *const Timer,
     };
 
@@ -334,7 +335,7 @@ pub fn insert_timer(timer: &Timer) {
         TIMER_QUEUE.lock().push(entry);
     }
 
-    timer.slot.store(entry.id, Ordering::Release);
+    timer.slot.store(id, Ordering::Release);
 }
 
 /// Remove a timer from the global queue

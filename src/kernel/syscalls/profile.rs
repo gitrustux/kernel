@@ -20,7 +20,7 @@
 
 #![no_std]
 
-use crate::kernel::object::{Handle, HandleTable, ObjectType, Rights};
+use crate::kernel::object::{Handle, HandleTable, ObjectType, Rights, KernelObjectBase};
 use crate::kernel::usercopy::{copy_from_user, UserPtr};
 use crate::kernel::syscalls::{SyscallRet, err_to_ret, ok_to_ret};
 use crate::rustux::types::*;
@@ -107,14 +107,14 @@ fn alloc_profile_id() -> u64 {
 ///
 /// Represents a CPU scheduling profile that can be applied to threads.
 pub struct Profile {
+    /// Kernel object base
+    pub base: KernelObjectBase,
+
     /// Profile ID
     id: u64,
 
     /// Profile information
     info: ProfileInfo,
-
-    /// Number of references
-    refcount: AtomicUsize,
 }
 
 impl Profile {
@@ -124,9 +124,9 @@ impl Profile {
         log_debug!("Profile::new: id={} flags={:#x}", id, info.flags);
 
         Self {
+            base: KernelObjectBase::new(ObjectType::Profile),
             id,
             info,
-            refcount: AtomicUsize::new(1),
         }
     }
 
@@ -142,12 +142,12 @@ impl Profile {
 
     /// Increment reference count
     pub fn inc_ref(&self) {
-        self.refcount.fetch_add(1, Ordering::Relaxed);
+        self.base.ref_inc();
     }
 
     /// Decrement reference count
     pub fn dec_ref(&self) {
-        if self.refcount.fetch_sub(1, Ordering::Release) == 1 {
+        if self.base.ref_dec() {
             // TODO: Add to cleanup list
         }
     }
@@ -183,7 +183,7 @@ pub fn sys_profile_create_impl(
     // TODO: Validate root job handle
 
     // Copy profile info from user
-    let user_ptr = UserPtr::<ProfileInfo>::new(profile_info_user);
+    let user_ptr = UserPtr::<u8>::new(profile_info_user);
     let mut profile_info = ProfileInfo::default();
 
     unsafe {
@@ -212,11 +212,7 @@ pub fn sys_profile_create_impl(
     let handle_table = crate::kernel::thread::current_thread_handle_table();
 
     // Create handle with APPLY_PROFILE rights
-    let handle = Handle::new_with_type(
-        profile.clone(),
-        ObjectType::Profile,
-        Rights::APPLY_PROFILE,
-    );
+    let handle = Handle::new(&profile.base as *const KernelObjectBase, Rights::APPLY_PROFILE);
     let handle_value = match handle_table.add(handle) {
         Ok(val) => val,
         Err(err) => {
@@ -226,10 +222,10 @@ pub fn sys_profile_create_impl(
     };
 
     // Write handle value to user
-    let out_ptr = UserPtr::<u32>::new(profile_out);
+    let out_ptr = UserPtr::<u8>::new(profile_out);
     unsafe {
         if let Err(err) =
-            crate::kernel::usercopy::copy_to_user(out_ptr, &handle_value as *const u32, 1)
+            crate::kernel::usercopy::copy_to_user(out_ptr, &handle_value as *const u32 as *const u8, 4)
         {
             log_error!("sys_profile_create: copy_to_user failed: {:?}", err);
             let _ = handle_table.remove(handle_value);

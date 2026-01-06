@@ -121,7 +121,6 @@ pub type VmarId = u64;
 const VMAR_ID_INVALID: VmarId = 0;
 
 /// Mapping state within a VMAR
-#[derive(Debug)]
 pub enum VmarRegion {
     /// A child VMAR
     Vmar {
@@ -444,7 +443,7 @@ impl Vmar {
         self.check_overlap(offset, aligned_size)?;
 
         // Validate VMO offset
-        if vmo_offset + size > vmo.size() {
+        if vmo_offset + (size as u64) > vmo.size() as u64 {
             return Err(RX_ERR_INVALID_ARGS);
         }
 
@@ -507,14 +506,14 @@ impl Vmar {
 
             // Map into address space
             // Convert virtual address back to physical for mapping
-            if let Err(err) = aspace.map(current_vaddr, paddr, 1, prot) {
+            if let Err(err) = aspace.map(current_vaddr, paddr as usize, 1, prot) {
                 log_error!("VMAR: Failed to map page at {:#x}: {:?}", current_vaddr, err);
                 // Clean up previously mapped pages
                 for j in 0..i {
                     let prev_vaddr = vaddr + (j * PAGE_SIZE);
                     let _ = aspace.unmap(prev_vaddr, 1);
                 }
-                return Err(err);
+                return Err(err as i32);
             }
         }
 
@@ -573,15 +572,15 @@ impl Vmar {
         let vaddr = (self.base + offset) as usize;
 
         // Unmap from address space first
-        let page_count = (size / PAGE_SIZE) as usize;
+        let page_count = (size / PAGE_SIZE as u64) as usize;
         if page_count > 0 {
             if let Err(err) = aspace.unmap(vaddr, page_count) {
                 log_error!("VMAR: Failed to unmap pages: {:?}", err);
-                return Err(err);
+                return Err(err as i32);
             }
 
             // Flush TLB for the unmapped region
-            aspace.flush_tlb(vaddr, page_count * PAGE_SIZE);
+            aspace.flush_tlb();
 
             log_debug!("VMAR: Unmapped vaddr={:#x} pages={}", vaddr, page_count);
         }
@@ -639,15 +638,15 @@ impl Vmar {
         let vaddr = (self.base + offset) as usize;
 
         // Update protection in address space
-        let page_count = (size / PAGE_SIZE) as usize;
+        let page_count = (size / PAGE_SIZE as u64) as usize;
         if page_count > 0 {
             if let Err(err) = aspace.protect(vaddr, page_count, new_prot) {
                 log_error!("VMAR: Failed to update protections: {:?}", err);
-                return Err(err);
+                return Err(err as i32);
             }
 
             // Flush TLB for the region with changed protections
-            aspace.flush_tlb(vaddr, page_count * PAGE_SIZE);
+            aspace.flush_tlb();
 
             log_debug!(
                 "VMAR: Protected vaddr={:#x} pages={} prot={:?}",
@@ -732,7 +731,7 @@ impl VmarRegistry {
 }
 
 /// Global VMAR registry
-static VMAR_REGISTRY: VmarRegistry = VmarRegistry::new();
+static VMAR_REGISTRY: Mutex<VmarRegistry> = Mutex::new(VmarRegistry::new());
 
 /// ============================================================================
 /// Root VMAR
@@ -754,7 +753,7 @@ pub fn init_root_user_vmar() {
         #[cfg(target_arch = "riscv64")]
         let (base, size) = (0x0000_1000usize, 0x0000_8000_0000usize);
 
-        ROOT_USER_VMAR = Some(Vmar::new_root(base, size));
+        ROOT_USER_VMAR = Some(Vmar::new_root(base as u64, size as u64));
     }
 }
 
@@ -783,6 +782,7 @@ fn lookup_vmar_from_handle(
     // For now, try to look up directly from VMAR registry
     let vmar_id = handle_val as VmarId;
     VMAR_REGISTRY
+        .lock()
         .get(vmar_id)
         .ok_or(RX_ERR_INVALID_ARGS)
 }
@@ -871,14 +871,14 @@ pub fn sys_vmar_allocate_impl(
     };
 
     // Register the VMAR
-    if let Err(err) = VMAR_REGISTRY.insert(child_vmar.clone()) {
+    if let Err(err) = VMAR_REGISTRY.lock().insert(child_vmar.clone()) {
         log_error!("sys_vmar_allocate: failed to register VMAR: {:?}", err);
         return err_to_ret(err);
     }
 
     // Write child address to user space
     if child_addr_out != 0 {
-        let user_ptr = UserPtr::<u64>::new(child_addr_out);
+        let user_ptr = UserPtr::<u8>::new(child_addr_out);
         unsafe {
             if let Err(err) = copy_to_user(
                 user_ptr,
@@ -887,7 +887,7 @@ pub fn sys_vmar_allocate_impl(
             ) {
                 log_error!("sys_vmar_allocate: copy_to_user failed: {:?}", err);
                 // Clean up VMAR
-                VMAR_REGISTRY.remove(child_vmar.id());
+                VMAR_REGISTRY.lock().remove(child_vmar.id());
                 return err_to_ret(err.into());
             }
         }
@@ -1010,7 +1010,7 @@ pub fn sys_vmar_map_impl(
 
     // Write mapped address to user space
     if mapped_addr_out != 0 {
-        let user_ptr = UserPtr::<u64>::new(mapped_addr_out);
+        let user_ptr = UserPtr::<u8>::new(mapped_addr_out);
         unsafe {
             if let Err(err) = copy_to_user(
                 user_ptr,
@@ -1182,7 +1182,7 @@ pub fn sys_vmar_destroy_impl(vmar_handle: u32) -> SyscallRet {
     }
 
     // Remove from registry
-    let _ = VMAR_REGISTRY.remove(vmar.id());
+    let _ = VMAR_REGISTRY.lock().remove(vmar.id());
 
     log_debug!("sys_vmar_destroy: success");
 
@@ -1196,7 +1196,7 @@ pub fn sys_vmar_destroy_impl(vmar_handle: u32) -> SyscallRet {
 /// Get VMAR subsystem statistics
 pub fn get_stats() -> VmarStats {
     VmarStats {
-        total_vmars: VMAR_REGISTRY.count(),
+        total_vmars: VMAR_REGISTRY.lock().count(),
         total_mappings: 0, // TODO: Track mappings across all VMARs
         mapped_bytes: 0,    // TODO: Track mapped bytes
     }

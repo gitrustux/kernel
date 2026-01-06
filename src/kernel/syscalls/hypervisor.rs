@@ -191,7 +191,7 @@ pub fn sys_guest_create_impl(
 
     // Write handles to user space
     if guest_handle_out != 0 {
-        let user_ptr = UserPtr::<u64>::new(guest_handle_out);
+        let user_ptr = UserPtr::<u8>::new(guest_handle_out);
         unsafe {
             if let Err(err) = copy_to_user(user_ptr, &guest_id as *const u64 as *const u8, 8) {
                 log_error!("sys_guest_create: copy_to_user failed: {:?}", err);
@@ -203,7 +203,7 @@ pub fn sys_guest_create_impl(
     if vmar_handle_out != 0 {
         // For now, just use guest_id + 1 as vmar_id
         let vmar_id = guest_id + 1;
-        let user_ptr = UserPtr::<u64>::new(vmar_handle_out);
+        let user_ptr = UserPtr::<u8>::new(vmar_handle_out);
         unsafe {
             if let Err(err) = copy_to_user(user_ptr, &vmar_id as *const u64 as *const u8, 8) {
                 log_error!("sys_guest_create: copy_to_user failed: {:?}", err);
@@ -298,7 +298,7 @@ pub fn sys_vcpu_create_impl(
 
     // Write handle to user space
     if handle_out != 0 {
-        let user_ptr = UserPtr::<u64>::new(handle_out);
+        let user_ptr = UserPtr::<u8>::new(handle_out);
         unsafe {
             if let Err(err) = copy_to_user(user_ptr, &vcpu_id as *const u64 as *const u8, 8) {
                 log_error!("sys_vcpu_create: copy_to_user failed: {:?}", err);
@@ -337,7 +337,7 @@ pub fn sys_vcpu_resume_impl(handle_val: u32, packet_out: usize) -> SyscallRet {
     // Zero packet for now
     if packet_out != 0 {
         let packet = 0u64;
-        let user_ptr = UserPtr::<u64>::new(packet_out);
+        let user_ptr = UserPtr::<u8>::new(packet_out);
         unsafe {
             if let Err(err) = copy_to_user(user_ptr, &packet as *const u64 as *const u8, 8) {
                 log_error!("sys_vcpu_resume: copy_to_user failed: {:?}", err);

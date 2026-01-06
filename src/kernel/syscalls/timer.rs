@@ -29,6 +29,7 @@ use crate::kernel::object::{Handle, HandleTable, KernelObjectBase, ObjectType, R
 use crate::kernel::syscalls::{SyscallRet, err_to_ret, ok_to_ret};
 use crate::rustux::types::*;
 use crate::rustux::types::err::*;
+use crate::kernel::sync::Mutex;
 use alloc::boxed::Box;
 use alloc::sync::Arc;
 use core::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
@@ -134,8 +135,14 @@ impl TimerRegistry {
     }
 }
 
+impl Default for TimerRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// Global timer registry
-static TIMER_REGISTRY: TimerRegistry = TimerRegistry::new();
+static TIMER_REGISTRY: Mutex<TimerRegistry> = Mutex::new(TimerRegistry::new());
 
 /// ============================================================================
 /// Handle to Timer Resolution
@@ -183,7 +190,7 @@ fn lookup_timer_from_handle(
     let timer_id = handle.id as timer::TimerId;
 
     // Get timer from registry
-    let timer = TIMER_REGISTRY.get(timer_id)
+    let timer = TIMER_REGISTRY.lock().get(timer_id)
         .ok_or(RX_ERR_NOT_FOUND)?;
 
     Ok((timer, handle))
@@ -246,7 +253,7 @@ pub fn sys_timer_create_impl(options: u32, clock_id: u32) -> SyscallRet {
     let timer_arc = Arc::new(timer);
 
     // Insert into timer registry
-    let timer_id = match TIMER_REGISTRY.insert(timer_arc.clone()) {
+    let timer_id = match TIMER_REGISTRY.lock().insert(timer_arc.clone()) {
         Ok(id) => id,
         Err(err) => {
             log_error!("sys_timer_create: failed to insert timer into registry: {:?}", err);
@@ -374,7 +381,7 @@ pub fn sys_timer_cancel_impl(handle_val: u32) -> SyscallRet {
 /// Get timer subsystem statistics
 pub fn get_stats() -> TimerStats {
     TimerStats {
-        total_timers: TIMER_REGISTRY.count(),
+        total_timers: TIMER_REGISTRY.lock().count(),
         armed_timers: 0, // TODO: Track armed timers
         fired_count: 0,  // TODO: Track fired timers
     }
@@ -417,10 +424,10 @@ mod tests {
         let timer = Timer::create().unwrap();
         let timer_arc = Arc::new(timer);
 
-        let id = TIMER_REGISTRY.insert(timer_arc.clone()).unwrap();
+        let id = TIMER_REGISTRY.lock().insert(timer_arc.clone()).unwrap();
         assert_eq!(id, timer_arc.id);
 
-        let retrieved = TIMER_REGISTRY.get(id).unwrap();
+        let retrieved = TIMER_REGISTRY.lock().get(id).unwrap();
         assert_eq!(retrieved.id, timer_arc.id);
     }
 
@@ -429,11 +436,11 @@ mod tests {
         let timer = Timer::create().unwrap();
         let timer_arc = Arc::new(timer);
 
-        let id = TIMER_REGISTRY.insert(timer_arc.clone()).unwrap();
-        let removed = TIMER_REGISTRY.remove(id).unwrap();
+        let id = TIMER_REGISTRY.lock().insert(timer_arc.clone()).unwrap();
+        let removed = TIMER_REGISTRY.lock().remove(id).unwrap();
 
         assert_eq!(removed.id, timer_arc.id);
-        assert!(TIMER_REGISTRY.get(id).is_none());
+        assert!(TIMER_REGISTRY.lock().get(id).is_none());
     }
 
     #[test]

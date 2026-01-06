@@ -580,7 +580,7 @@ impl JobRegistry {
         }
     }
 
-    fn insert(&self, job: Arc<Job>) -> Result {
+    fn insert(&mut self, job: Arc<Job>) -> Result {
         let id = job.id;
         let start = self.next_index.load(Ordering::Relaxed);
         let mut idx = (id as usize) % MAX_JOBS;

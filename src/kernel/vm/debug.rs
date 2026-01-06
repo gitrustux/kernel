@@ -92,7 +92,7 @@ impl WalkResult {
 
     /// Format as a string for display
     pub fn format(&self) -> WalkFormatter {
-        WalkFormatter { result: self }
+        WalkFormatter { result: *self }
     }
 }
 

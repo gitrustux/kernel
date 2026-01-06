@@ -119,15 +119,15 @@ pub fn arch_suspend() {
 pub fn arch_resume() {
     assert!(arch_ints_disabled());
 
-    mp::x86_init_percpu(0);
+    unsafe { mp::x86_init_percpu(0); }
     mmu::x86_mmu_percpu_init();
     mmu::x86_pat_sync(mp::cpu_num_to_mask(0));
 
     apic::apic_local_init();
 
     // Ensure the CPU that resumed was assigned the correct percpu object
-    let percpu = mp::x86_get_percpu();
-    assert!(apic::apic_local_id() == (*percpu).apic_id, "APIC ID mismatch");
+    let percpu = unsafe { mp::x86_get_percpu() };
+    assert!(apic::apic_local_id() == unsafe { (*percpu).apic_id }, "APIC ID mismatch");
 
     apic::apic_io_restore();
 }

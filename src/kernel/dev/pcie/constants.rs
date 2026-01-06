@@ -149,7 +149,7 @@ pub const PCI_COMMAND_INT_DISABLE: u16 = 0x0400;
 // ============================================================================
 
 /// Maximum number of buses
-pub const PCIE_MAX_BUSES: u8 = 256;
+pub const PCIE_MAX_BUSES: u16 = 256;
 
 /// Maximum number of devices per bus
 pub const PCIE_MAX_DEVICES_PER_BUS: u8 = 32;
@@ -208,7 +208,7 @@ pub const PCIE_MAX_CAPABILITIES: u8 = ((PCIE_BASE_CONFIG_SIZE - PCIE_STANDARD_CO
 pub const PCIE_CAP_PTR_NULL: u8 = 0;
 
 /// Minimum valid capability pointer
-pub const PCIE_CAP_PTR_MIN_VALID: u8 = PCIE_STANDARD_CONFIG_HDR_SIZE;
+pub const PCIE_CAP_PTR_MIN_VALID: u8 = PCIE_STANDARD_CONFIG_HDR_SIZE as u8;
 
 /// Maximum valid capability pointer
 pub const PCIE_CAP_PTR_MAX_VALID: u8 = (PCIE_BASE_CONFIG_SIZE - PCIE_CAPABILITY_ALIGNMENT as u16) as u8;

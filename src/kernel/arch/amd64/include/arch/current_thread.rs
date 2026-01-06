@@ -65,6 +65,6 @@ pub unsafe fn set_current_thread(thread: *mut Thread) {
 
 // Foreign function declarations for accessing the GS segment
 extern "C" {
-    fn x86_read_gs_offset64(offset: usize) -> u64;
-    fn x86_write_gs_offset64(offset: usize, value: u64);
+    fn x86_read_gs_offset64(offset: u32) -> u64;
+    fn x86_write_gs_offset64(offset: u32, value: u64);
 }

@@ -62,11 +62,11 @@ pub fn sys_handle_close_impl(handle_value: u32) -> SyscallRet {
 
     // Remove the handle
     match handle_table.remove(handle_value) {
-        Some(_handle) => {
+        Ok(_closed) => {
             log_debug!("sys_handle_close: success");
             ok_to_ret(0)
         }
-        None => {
+        Err(_) => {
             log_error!("sys_handle_close: bad handle");
             err_to_ret(RX_ERR_BAD_HANDLE)
         }
@@ -102,9 +102,9 @@ pub fn sys_handle_close_many_impl(handles: usize, num_handles: usize) -> Syscall
 
     // Copy handles from user
     let mut handle_buf = alloc::vec![0u32; num_handles];
-    let user_ptr = UserPtr::<u32>::new(handles);
+    let user_ptr = UserPtr::<u8>::new(handles);
     unsafe {
-        if let Err(err) = copy_from_user(handle_buf.as_mut_ptr(), user_ptr, num_handles) {
+        if let Err(err) = copy_from_user(handle_buf.as_mut_ptr() as *mut u8, user_ptr, num_handles * 4) {
             log_error!("sys_handle_close_many: copy_from_user failed: {:?}", err);
             return err_to_ret(err.into());
         }
@@ -121,8 +121,8 @@ pub fn sys_handle_close_many_impl(handles: usize, num_handles: usize) -> Syscall
         }
 
         match handle_table.remove(handle_value) {
-            Some(_) => removed += 1,
-            None => {
+            Ok(_) => removed += 1,
+            Err(_) => {
                 // Continue removing other handles even if one fails
                 log_debug!("sys_handle_close_many: bad handle {:#x}", handle_value);
             }
@@ -185,14 +185,15 @@ fn handle_dup_replace_impl(
     } else {
         // Check if requested rights are a subset of source rights
         let source_rights = source.rights();
-        if (source_rights & rights) != rights {
+        let requested_rights = Rights::from_raw(rights);
+        if (source_rights & requested_rights) != requested_rights {
             log_error!("handle_dup_replace: invalid rights");
             if is_replace {
                 handle_table.remove(handle_value);
             }
             return err_to_ret(RX_ERR_INVALID_ARGS);
         }
-        rights
+        requested_rights
     };
 
     // If replacing, remove the old handle first
@@ -201,7 +202,7 @@ fn handle_dup_replace_impl(
     }
 
     // Create the new handle
-    let new_handle = Handle::new(source.object().clone(), new_rights);
+    let new_handle = Handle::new(source.base, new_rights);
     let new_handle_value = match handle_table.add(new_handle) {
         Ok(val) => val,
         Err(err) => {
@@ -211,12 +212,12 @@ fn handle_dup_replace_impl(
     };
 
     // Write the new handle value to user
-    let user_ptr = UserPtr::<u32>::new(handle_out);
+    let user_ptr = UserPtr::<u8>::new(handle_out);
     unsafe {
         if let Err(err) = crate::kernel::usercopy::copy_to_user(
             user_ptr,
-            &new_handle_value as *const u32,
-            1,
+            &new_handle_value as *const u32 as *const u8,
+            4,
         ) {
             log_error!("handle_dup_replace: copy_to_user failed: {:?}", err);
             // Clean up the new handle
@@ -352,11 +353,12 @@ pub fn sys_handle_transfer_impl(
     } else {
         // Check if requested rights are a subset of source rights
         let source_rights = source.rights();
-        if (source_rights & new_rights) != new_rights {
+        let requested_rights = Rights::from_raw(new_rights);
+        if (source_rights & requested_rights) != requested_rights {
             log_error!("sys_handle_transfer: invalid rights");
             return err_to_ret(RX_ERR_INVALID_ARGS);
         }
-        new_rights
+        requested_rights
     };
 
     // Remove the handle from current process (it's being transferred)

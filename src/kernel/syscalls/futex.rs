@@ -208,7 +208,14 @@ fn futex_wait(
     // Read current value at address
     // TODO: Implement safe userspace read
     // For now, we'll assume the value matches
-    let _current_value = unsafe { user_ptr.read() };
+    let mut current_value: u32 = 0;
+    let _result = unsafe {
+        crate::kernel::usercopy::copy_from_user(
+            &mut current_value as *mut u32 as *mut u8,
+            crate::kernel::usercopy::UserPtr::new(user_addr),
+            4,
+        )
+    };
 
     // Check if value matches expected
     // if _current_value != expected_value {
@@ -255,7 +262,7 @@ fn futex_wake(user_addr: FutexAddr, count: u32, new_owner: FutexOwner) -> Result
             1 // TODO: Actually count woken waiters
         };
 
-        Ok(woken)
+        Ok(woken as usize)
     } else {
         // No futex at this address
         Ok(0)

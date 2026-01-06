@@ -26,7 +26,7 @@
 #![no_std]
 
 use crate::kernel::vm::layout::*;
-use crate::kernel::vm::{VmError, Result};
+use crate::kernel::vm::{ArchPageTable, VmError, Result};
 use core::fmt;
 
 /// ============================================================================
@@ -282,7 +282,7 @@ impl PageTable {
     /// Create a new page table
     pub fn new() -> Result<Self> {
         Ok(Self {
-            inner: ArchPageTableImpl::new()?,
+            inner: ArchPageTableImpl::new(),
             asid: ASID_INVALID,
         })
     }
@@ -313,9 +313,9 @@ impl PageTable {
         }
 
         // Enforce W^X
-        let flags = PageTableFlags::from_bits(flags).enforce_wxorx();
+        let flags_bits = flags.enforce_wxorx();
 
-        self.inner.map(vaddr, paddr, PageTableFlags::from_bits(flags))
+        self.inner.map(vaddr, paddr, PageTableFlags::from_bits(flags_bits))
     }
 
     /// Map multiple pages
@@ -332,12 +332,12 @@ impl PageTable {
         }
 
         // Enforce W^X
-        let flags = PageTableFlags::from_bits(flags).enforce_wxorx();
+        let flags_bits = flags.enforce_wxorx();
 
         for i in 0..count {
             let va = vaddr + (i * PAGE_SIZE);
             let pa = paddr + (i * PAGE_SIZE);
-            self.inner.map(va, pa, PageTableFlags::from_bits(flags))?;
+            self.inner.map(va, pa, PageTableFlags::from_bits(flags_bits))?;
         }
 
         Ok(())
@@ -378,9 +378,9 @@ impl PageTable {
         }
 
         // Enforce W^X
-        let flags = PageTableFlags::from_bits(flags).enforce_wxorx();
+        let flags_bits = flags.enforce_wxorx();
 
-        self.inner.protect(vaddr, PageTableFlags::from_bits(flags))
+        self.inner.protect(vaddr, PageTableFlags::from_bits(flags_bits))
     }
 
     /// Update protection flags for multiple pages
@@ -395,11 +395,11 @@ impl PageTable {
         }
 
         // Enforce W^X
-        let flags = PageTableFlags::from_bits(flags).enforce_wxorx();
+        let flags_bits = flags.enforce_wxorx();
 
         for i in 0..count {
             let va = vaddr + (i * PAGE_SIZE);
-            self.inner.protect(va, PageTableFlags::from_bits(flags))?;
+            self.inner.protect(va, PageTableFlags::from_bits(flags_bits))?;
         }
 
         Ok(())

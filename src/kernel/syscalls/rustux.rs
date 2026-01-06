@@ -247,9 +247,9 @@ pub fn sys_clock_get_new_impl(clock_id: u32, time_out: usize) -> SyscallRet {
     };
 
     // Write time to user
-    let user_ptr = UserPtr::<i64>::new(time_out);
+    let user_ptr = UserPtr::<u8>::new(time_out);
     unsafe {
-        if let Err(err) = copy_to_user(user_ptr, &time as *const i64, 1) {
+        if let Err(err) = copy_to_user(user_ptr, &time as *const i64 as *const u8, 8) {
             log_error!("sys_clock_get_new: copy_to_user failed: {:?}", err);
             return err_to_ret(err.into());
         }
@@ -348,9 +348,9 @@ pub fn sys_event_create_impl(options: u32, event_out: usize) -> SyscallRet {
     let event_handle = 42u32; // Placeholder
 
     // Write handle to user
-    let user_ptr = UserPtr::<u32>::new(event_out);
+    let user_ptr = UserPtr::<u8>::new(event_out);
     unsafe {
-        if let Err(err) = copy_to_user(user_ptr, &event_handle as *const u32, 1) {
+        if let Err(err) = copy_to_user(user_ptr, &event_handle as *const u32 as *const u8, 4) {
             log_error!("sys_event_create: copy_to_user failed: {:?}", err);
             return err_to_ret(err.into());
         }
@@ -396,16 +396,16 @@ pub fn sys_eventpair_create_impl(
     let handle1 = 101u32; // Placeholder
 
     // Write handles to user
-    let user_ptr0 = UserPtr::<u32>::new(out0);
-    let user_ptr1 = UserPtr::<u32>::new(out1);
+    let user_ptr0 = UserPtr::<u8>::new(out0);
+    let user_ptr1 = UserPtr::<u8>::new(out1);
 
     unsafe {
-        if let Err(err) = copy_to_user(user_ptr0, &handle0 as *const u32, 1) {
+        if let Err(err) = copy_to_user(user_ptr0, &handle0 as *const u32 as *const u8, 4) {
             log_error!("sys_eventpair_create: copy_to_user out0 failed: {:?}", err);
             return err_to_ret(err.into());
         }
 
-        if let Err(err) = copy_to_user(user_ptr1, &handle1 as *const u32, 1) {
+        if let Err(err) = copy_to_user(user_ptr1, &handle1 as *const u32 as *const u8, 4) {
             log_error!("sys_eventpair_create: copy_to_user out1 failed: {:?}", err);
             return err_to_ret(err.into());
         }
@@ -455,9 +455,9 @@ pub fn sys_debuglog_create_impl(
     }
 
     // Write handle to user
-    let user_ptr = UserPtr::<u32>::new(out);
+    let user_ptr = UserPtr::<u8>::new(out);
     unsafe {
-        if let Err(err) = copy_to_user(user_ptr, &log_handle as *const u32, 1) {
+        if let Err(err) = copy_to_user(user_ptr, &log_handle as *const u32 as *const u8, 4) {
             log_error!("sys_debuglog_create: copy_to_user failed: {:?}", err);
             return err_to_ret(err.into());
         }

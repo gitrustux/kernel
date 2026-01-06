@@ -62,7 +62,6 @@ pub const MAX_MSG_SIZE: usize = 64 * 1024;
 pub const MAX_MSG_HANDLES: usize = 64;
 
 /// Message data
-#[derive(Debug)]
 pub struct Message {
     /// Message bytes
     pub data: Vec<u8>,

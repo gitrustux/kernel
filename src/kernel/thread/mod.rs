@@ -51,6 +51,7 @@ use core::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use crate::kernel::sync::spin::SpinMutex;
 use crate::kernel::sync::Mutex;
 use alloc::vec::Vec;
+use alloc::string::String;
 use crate::rustux::types::*;
 
 // Import logging macros
@@ -237,6 +238,12 @@ pub struct Thread {
 
     /// Reference count
     pub ref_count: AtomicU64,
+
+    /// Entry point (virtual address)
+    pub entry_point: VAddr,
+
+    /// Argument to pass to entry point
+    pub entry_arg: usize,
 }
 
 /// Architecture-specific thread context
@@ -358,20 +365,24 @@ impl Thread {
             joinable: AtomicBool::new(false),
             join_waiters: Mutex::new(Vec::new()),
             ref_count: AtomicU64::new(1),
+            entry_point,
+            entry_arg: arg,
         };
 
         // Initialize architecture-specific context
-        let mut ctx_guard = thread.arch_context.lock();
-        *ctx_guard = Some(ArchContext {
-            #[cfg(target_arch = "aarch64")]
-            inner: unsafe { core::mem::zeroed() },
+        {
+            let mut ctx_guard = thread.arch_context.lock();
+            *ctx_guard = Some(ArchContext {
+                #[cfg(target_arch = "aarch64")]
+                inner: unsafe { core::mem::zeroed() },
 
-            #[cfg(target_arch = "x86_64")]
-            inner: unsafe { core::mem::zeroed() },
+                #[cfg(target_arch = "x86_64")]
+                inner: unsafe { core::mem::zeroed() },
 
-            #[cfg(target_arch = "riscv64")]
-            inner: unsafe { core::mem::zeroed() },
-        });
+                #[cfg(target_arch = "riscv64")]
+                inner: unsafe { core::mem::zeroed() },
+            });
+        }
 
         // Initialize context with entry point and stack
         // This would call into arch-specific code
@@ -442,7 +453,7 @@ impl Thread {
 
     /// Get the kernel stack
     pub fn stack(&self) -> Option<KernelStack> {
-        *self.stack.lock()
+        self.stack.lock().clone()
     }
 
     /// Set the kernel stack
@@ -556,6 +567,36 @@ impl Thread {
     /// Get the current reference count
     pub fn ref_count(&self) -> u64 {
         self.ref_count.load(Ordering::Relaxed)
+    }
+
+    /// Create a dummy thread for FPU state operations
+    ///
+    /// This is used when saving/restoring FPU state without an actual thread context.
+    /// Returns a mutable reference to a static dummy thread.
+    pub fn dummy_thread() -> &'static mut Self {
+        // Use a static dummy thread for FPU operations
+        // This is unsafe but necessary for low-level FPU state management
+        static mut DUMMY_THREAD: Thread = Thread {
+            tid: 0,
+            state: Mutex::new(ThreadState::Ready),
+            priority: PRIORITY_DEFAULT,
+            cpu_affinity: CPU_MASK_ALL,
+            block_reason: Mutex::new(BlockReason::None),
+            stack: Mutex::new(None),
+            pid: Mutex::new(None),
+            parent_tid: Mutex::new(None),
+            return_code: Mutex::new(None),
+            arch_context: Mutex::new(None),
+            arch: ArchData::new(),
+            name: Mutex::new(Some("<dummy>")),
+            joinable: AtomicBool::new(false),
+            join_waiters: Mutex::new(Vec::new()),
+            ref_count: AtomicU64::new(1),
+            entry_point: 0,
+            entry_arg: 0,
+        };
+
+        unsafe { &mut DUMMY_THREAD }
     }
 }
 
@@ -763,13 +804,12 @@ pub fn wake_object_waiters(handle: u32, signals: u64) -> usize {
 /// This is used by syscalls to access handles.
 pub fn current_thread_handle_table() -> &'static crate::kernel::object::handle::HandleTable {
     // TODO: Implement proper thread-local handle table lookup
-    // For now, return a static stub
-    static STUB_TABLE: crate::kernel::sync::spin::SpinMutex<Option<crate::kernel::object::handle::HandleTable>> =
-        crate::kernel::sync::spin::SpinMutex::new(None);
+    // For now, use a static stub
+    use crate::kernel::object::handle::HandleTable;
 
-    // This is a stub - in a real implementation, this would return
-    // the current thread's actual handle table
-    unsafe { &*(&core::ptr::null() as *const crate::kernel::object::handle::HandleTable) }
+    static mut STUB_TABLE: HandleTable = unsafe { HandleTable::new() };
+
+    unsafe { &STUB_TABLE }
 }
 
 /// ============================================================================
@@ -807,15 +847,38 @@ extern "C" fn thread_entry_wrapper() -> ! {
     // Get current thread (would need scheduler support)
     // let thread = scheduler::current_thread();
 
-    // Set up TLS
-    // unsafe { tls_set(thread.tls_base); }
+    // For now, we need a way to retrieve the current thread's entry point
+    // In a real implementation, the scheduler would set up a thread pointer
+    // that we can use to retrieve the current thread struct.
 
-    // Call the actual entry point
-    // This would retrieve entry_point and arg from thread struct
-    let entry_point: extern "C" fn(usize) -> ! = unimplemented!();
-    let arg: usize = 0;
+    // As a temporary measure, we'll need to store this in a way that
+    // the architecture-specific context switch code can access it.
+    // For now, we'll use a simple approach: the entry point and arg
+    // should be passed via the stack or registers during context switch.
 
-    entry_point(arg)
+    // TODO: Implement proper current thread retrieval via:
+    // 1. Per-CPU data (e.g., GS base on x86_64)
+    // 2. Thread-local storage
+    // 3. Scheduler API
+
+    // Placeholder: retrieve entry point from current thread
+    // This will be properly implemented when the scheduler is complete
+    if let Some(thread) = get_current_thread() {
+        let entry_point = thread.entry_point;
+        let arg = thread.entry_arg;
+
+        // Convert entry_point to function pointer and call it
+        let entry_fn: extern "C" fn(usize) -> ! = unsafe {
+            core::mem::transmute(entry_point)
+        };
+
+        entry_fn(arg);
+    }
+
+    // If we can't get the current thread, halt
+    loop {
+        core::hint::spin_loop();
+    }
 }
 
 /// ============================================================================
