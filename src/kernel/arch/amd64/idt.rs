@@ -7,6 +7,9 @@
 //! x86-64 Interrupt Descriptor Table (IDT)
 
 
+// Re-export TSS from descriptor module
+pub use super::descriptor::TaskStateSegment as Tss;
+
 /// IDT entry structure
 #[repr(C, packed)]
 #[derive(Debug, Clone, Copy)]
@@ -28,14 +31,43 @@ pub struct IdtPointer {
     pub base: u64,
 }
 
-/// Task State Segment (TSS) placeholder
-#[repr(C)]
-#[derive(Debug, Clone, Copy)]
-pub struct Tss {
-    pub data: [u8; 0],
-}
+// IDT Entry types
+pub const IDT_INTERRUPT_GATE: u8 = 0x8E;
+pub const IDT_TRAP_GATE: u8 = 0x8F;
+pub const IDT_TASK_GATE: u8 = 0x85;
 
 /// Initialize the IDT
+///
+/// This function initializes the IDT with proper exception handlers.
 pub fn idt_init() {
-    // TODO: Implement IDT initialization
+    unsafe {
+        // Use the IDT setup from descriptor module
+        super::descriptor::idt_setup_readonly();
+    }
+}
+
+impl IdtEntry {
+    pub const fn null() -> Self {
+        Self {
+            offset_low: 0,
+            selector: 0,
+            ist: 0,
+            type_attr: 0,
+            offset_mid: 0,
+            offset_high: 0,
+            reserved: 0,
+        }
+    }
+
+    pub fn set_gate(offset: u64, selector: u16, type_attr: u8, ist: u8) -> Self {
+        Self {
+            offset_low: (offset & 0xFFFF) as u16,
+            selector,
+            ist,
+            type_attr,
+            offset_mid: ((offset >> 16) & 0xFFFF) as u16,
+            offset_high: ((offset >> 32) & 0xFFFFFFFF) as u32,
+            reserved: 0,
+        }
+    }
 }
