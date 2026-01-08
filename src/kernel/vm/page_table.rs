@@ -313,8 +313,9 @@ impl PageTable {
 
         // Enforce W^X
         let flags_bits = flags.enforce_wxorx();
+        let flags = PageTableFlags::from_bits(flags_bits);
 
-        self.inner.map(vaddr, paddr, flags_bits)
+        self.inner.map(vaddr, paddr, flags)
     }
 
     /// Map multiple pages
@@ -332,11 +333,12 @@ impl PageTable {
 
         // Enforce W^X
         let flags_bits = flags.enforce_wxorx();
+        let flags = PageTableFlags::from_bits(flags_bits);
 
         for i in 0..count {
             let va = vaddr + (i * PAGE_SIZE);
             let pa = paddr + (i * PAGE_SIZE);
-            self.inner.map(va, pa, flags_bits)?;
+            self.inner.map(va, pa, flags)?;
         }
 
         Ok(())
@@ -378,8 +380,9 @@ impl PageTable {
 
         // Enforce W^X
         let flags_bits = flags.enforce_wxorx();
+        let flags = PageTableFlags::from_bits(flags_bits);
 
-        self.inner.protect(vaddr, flags_bits)
+        self.inner.protect(vaddr, flags)
     }
 
     /// Update protection flags for multiple pages
@@ -395,10 +398,11 @@ impl PageTable {
 
         // Enforce W^X
         let flags_bits = flags.enforce_wxorx();
+        let flags = PageTableFlags::from_bits(flags_bits);
 
         for i in 0..count {
             let va = vaddr + (i * PAGE_SIZE);
-            self.inner.protect(va, flags_bits)?;
+            self.inner.protect(va, flags)?;
         }
 
         Ok(())
