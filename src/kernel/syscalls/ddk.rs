@@ -30,7 +30,6 @@
 //! - `rx_interrupt_trigger` - Trigger virtual interrupt
 //! - `rx_smc_call` - SMC call (ARM)
 
-#![no_std]
 
 use crate::kernel::usercopy::{copy_from_user, copy_to_user, UserPtr};
 use crate::kernel::syscalls::{SyscallRet, err_to_ret, ok_to_ret};

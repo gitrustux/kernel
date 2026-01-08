@@ -8,7 +8,6 @@
 //!
 //! Tests for clock and timer functionality.
 
-#![no_std]
 
 use crate::kernel::tests::runner::*;
 use crate::kernel::timer;

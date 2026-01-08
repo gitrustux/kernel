@@ -8,7 +8,6 @@
 //!
 //! Tests for preemption disable functionality.
 
-#![no_std]
 
 use crate::kernel::tests::runner::*;
 use crate::kernel::sync;

@@ -13,7 +13,6 @@
 //! ARM64 supports SMC (Secure Monitor Call) which is used to call into
 //! the ARM Secure Monitor (typically for TrustZone services).
 
-#![no_std]
 
 use crate::kernel::syscalls::{SyscallRet, err_to_ret, ok_to_ret};
 use crate::rustux::types::*;

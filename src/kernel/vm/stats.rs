@@ -23,7 +23,6 @@
 //! println!("Total: {} MB", stats.total_bytes / 1024 / 1024);
 //! ```
 
-#![no_std]
 
 use crate::kernel::pmm;
 use crate::rustux::types::*;

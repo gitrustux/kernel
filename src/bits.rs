@@ -9,7 +9,6 @@
 //! This module provides bit-level manipulation functions used throughout
 //! the kernel for working with hardware registers and bitfields.
 
-#![no_std]
 
 /// Extract a bitfield from a value
 ///

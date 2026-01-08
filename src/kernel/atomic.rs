@@ -8,7 +8,6 @@
 //!
 //! This module provides atomic types and operations for kernel use.
 
-#![no_std]
 
 // Re-export core atomic types with kernel-specific aliases
 pub use core::sync::atomic::{

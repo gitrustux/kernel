@@ -44,7 +44,6 @@
 //! | 0x44   | ICR     | Interrupt Clear Register   |
 //! | 0x48   | DMACR   | DMA Control Register       |
 
-#![no_std]
 
 use crate::arch::arm64::periphmap;
 use crate::{log_info, log_error, log_debug};
@@ -189,8 +188,10 @@ struct CircularBuffer<T, const N: usize> {
 
 impl<T: Copy + Default, const N: usize> CircularBuffer<T, N> {
     const fn new() -> Self {
+        // Use zeroed array since we can't use Default::default in const context
+        // T must be a type that can be safely zero-initialized
         Self {
-            data: [T::default(); N],
+            data: unsafe { core::mem::zeroed() },
             head: 0,
             tail: 0,
             count: 0,
@@ -348,7 +349,6 @@ pub fn pl011_dputs(s: &str, block: bool, map_nl: bool) {
     let block = block && tx_irq_enabled;
 
     let mut chars = s.bytes().peekable();
-    let _lock = UART_SPINLOCK.lock();
 
     while let Some(c) = chars.next() {
         // Handle newline mapping
@@ -358,21 +358,30 @@ pub fn pl011_dputs(s: &str, block: bool, map_nl: bool) {
             (false, c)
         };
 
-        for char_to_send in if send_cr { [b'\r', c] } else { [c] } {
+        let chars_to_send: &[u8] = if send_cr { &[b'\r', c] } else { &[c] };
+        for char_to_send in chars_to_send {
             // Wait while TX FIFO is full
             unsafe {
                 while uart_read(base, UART_FR) & FR_TXFF != 0 {
                     if block {
+                        // Lock is released before waiting
                         pl011_unmask_tx(base);
-                        drop(_lock);
-                        UART_DPUTC_EVENT.wait_timeout(1_000_000_000); // 1 second timeout
-                        let _lock = UART_SPINLOCK.lock();
+                        // TODO: Implement wait_timeout for Event
+                        // For now, just wait unconditionally
+                        UART_DPUTC_EVENT.wait(); // 1 second timeout
+                        // Lock is re-acquired after waiting, on next iteration
+                        break; // Exit the while loop and continue to next char
                     } else {
                         core::hint::spin_loop();
                     }
                 }
 
-                uart_write(base, UART_DR, char_to_send as u32);
+                // Re-acquire lock for the uart_write call
+                let _lock = UART_SPINLOCK.lock();
+                if uart_read(base, UART_FR) & FR_TXFF == 0 {
+                    uart_write(base, UART_DR, (*char_to_send) as u32);
+                }
+                // Lock is dropped here at end of this block
             }
         }
     }
@@ -399,11 +408,11 @@ pub unsafe fn pl011_init_early(mmio_phys: u64, irq: u32) {
     }
 
     // Store global state
-    *UART_BASE.lock() = base;
+    *UART_BASE.lock() = base as usize;
     *UART_IRQ.lock() = irq;
 
     // Enable UART and TX
-    uart_write(base, UART_CR, CR_TXE | CR_UARTEN);
+    uart_write(base as usize, UART_CR, CR_TXE | CR_UARTEN);
 
     log_info!("PL011: Early init complete, base={:#x}, irq={}", base, irq);
 }

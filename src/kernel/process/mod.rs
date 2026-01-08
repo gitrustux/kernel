@@ -37,7 +37,6 @@
 //! let aspace = process.address_space();
 //! ```
 
-#![no_std]
 
 use crate::kernel::vm::aspace::*;
 use crate::kernel::vm::Result;

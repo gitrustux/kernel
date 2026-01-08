@@ -9,7 +9,6 @@
 //!
 //! This module provides the function to enter user space from kernel mode.
 
-#![no_std]
 #![feature(naked_functions)]
 
 use crate::rustux::types::*;

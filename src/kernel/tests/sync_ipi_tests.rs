@@ -8,7 +8,6 @@
 //!
 //! Tests for inter-processor interrupt synchronization.
 
-#![no_std]
 
 use crate::kernel::tests::runner::*;
 use crate::kernel::mp;

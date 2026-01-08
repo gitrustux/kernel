@@ -8,7 +8,6 @@
 //!
 //! Minimal stub for physical memory mapping.
 
-#![no_std]
 
 /// Map physical memory to virtual memory
 pub fn physmap_to_virt(_phys: u64, _size: usize) -> u64 {

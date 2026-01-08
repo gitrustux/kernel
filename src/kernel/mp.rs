@@ -33,7 +33,6 @@
 //! }, 0);
 //! ```
 
-#![no_std]
 
 use crate::kernel::sync::Mutex;
 use crate::kernel::percpu;
@@ -372,7 +371,7 @@ pub fn mp_send_ipi(target: MpIpiTarget, mask: CpuMask, ipi_type: MpIpiType) {
     // Call architecture-specific IPI send
     #[cfg(target_arch = "aarch64")]
     {
-        crate::arch::arm64::interrupts::arm64_send_ipi(target_mask, ipi_type);
+        crate::arch::arm64::interrupts::arm64_send_ipi(target_mask, ipi_type as u32);
     }
 
     #[cfg(target_arch = "x86_64")]

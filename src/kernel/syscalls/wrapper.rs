@@ -16,7 +16,6 @@
 //! - Provides error handling for invalid syscalls
 //! - Manages interrupt state during syscalls
 
-#![no_std]
 
 use crate::kernel::syscalls::{SyscallRet, err_to_ret, ok_to_ret};
 use crate::rustux::types::*;

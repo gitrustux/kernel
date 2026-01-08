@@ -46,7 +46,7 @@ pub fn arm64_validate_debug_state(state: &mut Arm64DebugState) -> bool {
     let hw_bp_count = arm64_hw_breakpoint_count();
     for i in 0..hw_bp_count {
         let addr = state.hw_bps[i as usize].dbgbvr;
-        if addr != 0 && !is_user_address(addr) {
+        if addr != 0 && !unsafe { is_user_address(addr) } {
             return false;
         }
 

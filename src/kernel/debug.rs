@@ -31,7 +31,6 @@
 //! panic!("Unexpected state in {}", function_name());
 //! ```
 
-#![no_std]
 
 use core::fmt::Write;
 use core::sync::atomic::{AtomicBool, Ordering};

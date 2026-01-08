@@ -8,7 +8,6 @@
 //!
 //! Minimal stub for kernel tracing functionality.
 
-#![no_std]
 
 /// Kernel trace tag
 pub type ktrace_tag_t = u32;

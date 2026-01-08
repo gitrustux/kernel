@@ -24,7 +24,6 @@
 //! handle.rights.require(Rights::READ)?;
 //! ```
 
-#![no_std]
 
 use crate::kernel::sync::Mutex;
 use crate::rustux::types::*;

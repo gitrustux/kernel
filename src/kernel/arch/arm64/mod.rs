@@ -9,7 +9,6 @@
 //! This module provides the ARM64-specific implementation of the
 //! Architecture Abstraction Layer (AAL).
 
-#![no_std]
 
 // Core architecture modules
 pub mod aal;

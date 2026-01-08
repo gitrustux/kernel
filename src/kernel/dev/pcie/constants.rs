@@ -9,7 +9,6 @@
 //! This module contains all the standard PCI and PCIe constants,
 //! register offsets, and bit definitions.
 
-#![no_std]
 
 // ============================================================================
 // Configuration Space Offsets

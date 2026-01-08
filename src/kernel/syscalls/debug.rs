@@ -18,7 +18,6 @@
 //! - `rx_ktrace_write` - Write to kernel trace
 //! - `rx_mtrace_control` - Control memory tracing
 
-#![no_std]
 
 use crate::kernel::usercopy::{copy_from_user, copy_to_user, UserPtr};
 use crate::kernel::syscalls::{SyscallRet, err_to_ret, ok_to_ret};

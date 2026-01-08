@@ -33,7 +33,6 @@
 //! - Sv48: 48-bit VA (256 TB user + 256 TB kernel)
 //! - Page sizes: 4KB, 2MB, 1GB
 
-#![no_std]
 
 use core::fmt;
 
@@ -157,7 +156,7 @@ pub mod arm64 {
     /// MMU ASID constants
     pub const MMU_ARM64_ASID_BITS: u32 = 16;
     pub const MMU_ARM64_GLOBAL_ASID: u32 = 0;
-    pub const MMU_ARM64_MAX_USER_ASID: u16 = (1 << 16) - 2;
+    pub const MMU_ARM64_MAX_USER_ASID: u16 = ((1u32 << 16) - 2) as u16;
 }
 
 /// ============================================================================
@@ -543,7 +542,7 @@ pub const ASID_INVALID: Asid = 0;
 
 /// Global kernel ASID
 #[cfg(target_arch = "aarch64")]
-pub const ASID_GLOBAL: Asid = arm64::MMU_ARM64_GLOBAL_ASID;
+pub const ASID_GLOBAL: Asid = arm64::MMU_ARM64_GLOBAL_ASID as Asid;
 
 /// Maximum number of address spaces
 #[cfg(target_arch = "aarch64")]

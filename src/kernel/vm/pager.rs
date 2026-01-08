@@ -24,7 +24,6 @@
 //! pager.fault(&vmo, offset)?;
 //! ```
 
-#![no_std]
 
 use crate::kernel::pmm;
 use crate::kernel::vm::page_table::PageTableFlags;

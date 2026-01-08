@@ -8,7 +8,6 @@
 //!
 //! Minimal stub for exception handling.
 
-#![no_std]
 
 /// Exception frame
 #[repr(C)]

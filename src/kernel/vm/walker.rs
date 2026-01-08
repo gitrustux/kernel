@@ -18,7 +18,6 @@
 //! - Safe: Uses safe Rust where possible, unsafe only for hardware access
 //! - Consistent: Same output format across architectures
 
-#![no_std]
 
 use crate::kernel::vm::layout::{VAddr, PAddr, PAGE_SIZE, is_user_vaddr};
 use crate::kernel::vm::aspace::AddressSpace;

@@ -9,7 +9,6 @@
 //! Provides safe functions for copying memory to/from user space,
 //! with proper exception handling for page faults.
 
-#![no_std]
 
 use crate::debug;
 use crate::rustux::types::*;

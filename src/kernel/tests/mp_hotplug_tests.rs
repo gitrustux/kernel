@@ -8,7 +8,6 @@
 //!
 //! Tests for CPU hotplug functionality.
 
-#![no_std]
 
 use crate::kernel::tests::runner::*;
 use crate::kernel::mp;

@@ -22,7 +22,6 @@
 //! - Configurable slack for power efficiency
 //! - Event-based signaling
 
-#![no_std]
 
 use crate::kernel::object::timer::{self, Timer, TimerState};
 use crate::kernel::object::{Handle, HandleTable, KernelObjectBase, ObjectType, Rights};

@@ -51,7 +51,6 @@
 //!
 //! By default, the physical timer is used unless booting at EL1 without virtualization.
 
-#![no_std]
 
 use crate::{log_info, log_error, log_debug};
 use core::sync::atomic::{AtomicU32, AtomicU64, Ordering};

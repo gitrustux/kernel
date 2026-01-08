@@ -9,7 +9,6 @@
 //! This module provides exception handling for RISC-V, including
 //! page faults, illegal instructions, and system calls.
 
-#![no_std]
 
 use crate::arch::riscv64::registers::csr;
 use crate::arch::riscv64::registers::scause;

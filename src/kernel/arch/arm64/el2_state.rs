@@ -8,7 +8,6 @@
 //!
 //! Minimal stub for EL2 state management.
 
-#![no_std]
 
 /// EL2 state structure
 #[repr(C)]

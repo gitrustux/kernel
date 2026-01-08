@@ -9,7 +9,6 @@
 //! This module provides functions for interacting with the RISC-V PLIC,
 //! which handles external interrupts for the system.
 
-#![no_std]
 
 use crate::arch::riscv64;
 

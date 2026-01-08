@@ -9,7 +9,6 @@
 //! This module provides compatibility functions for the LK kernel heritage
 //! that Zircon (and thus Rustux) was built upon.
 
-#![no_std]
 
 // lk/init module for kernel initialization
 pub mod init {

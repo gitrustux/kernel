@@ -8,7 +8,6 @@
 //!
 //! This module provides CPU feature detection using CPUID.
 
-#![no_std]
 
 use core::arch::x86_64::{CpuidResult, __cpuid_count};
 

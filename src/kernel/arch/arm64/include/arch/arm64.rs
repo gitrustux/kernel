@@ -44,6 +44,7 @@ extern "C" {
 }
 
 #[repr(C)]
+#[derive(Default, Clone, Copy)]
 pub struct arm64_cache_desc_t {
     pub ctype: u8,
     pub write_through: bool,
@@ -56,6 +57,7 @@ pub struct arm64_cache_desc_t {
 }
 
 #[repr(C)]
+#[derive(Default, Clone, Copy)]
 pub struct arm64_cache_info_t {
     pub inner_boundary: u8,
     pub lou_u: u8,
@@ -67,6 +69,7 @@ pub struct arm64_cache_info_t {
 
 /* exception handling */
 #[repr(C)]
+#[derive(Debug)]
 pub struct arm64_iframe_long {
     pub r: [u64; 30],
     pub lr: u64,

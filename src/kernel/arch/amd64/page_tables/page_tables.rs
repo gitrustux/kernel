@@ -26,7 +26,6 @@
 //! = 48 bits virtual address (256 TB)
 //! ```
 
-#![no_std]
 
 use core::ops::{Deref, DerefMut};
 use core::ptr::{read_volatile, write_volatile};

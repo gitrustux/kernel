@@ -43,7 +43,7 @@ impl ArmArchVmAspace {
     pub fn new() -> Self {
         Self {
             canary: Canary::with_magic(0x56414153), // VAAS in hex
-            lock: Mutex::new(()),
+            lock: Mutex::new(),
             asid: MMU_ARM64_UNUSED_ASID,
             tt_phys: 0,
             tt_virt: core::ptr::null_mut(),

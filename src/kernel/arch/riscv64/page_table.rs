@@ -34,7 +34,6 @@
 //! pt.unmap_page(0x1000)?;
 //! ```
 
-#![no_std]
 
 use crate::kernel::pmm;
 use crate::rustux::types::*;

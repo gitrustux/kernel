@@ -23,7 +23,6 @@
 //! - `rx_pci_query_irq_mode` - Query IRQ mode
 //! - `rx_pci_set_irq_mode` - Set IRQ mode
 
-#![no_std]
 
 use crate::kernel::usercopy::{copy_from_user, copy_to_user, UserPtr};
 use crate::kernel::syscalls::{SyscallRet, err_to_ret, ok_to_ret};

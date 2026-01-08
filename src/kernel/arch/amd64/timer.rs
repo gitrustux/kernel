@@ -9,7 +9,6 @@
 //! This module provides functions for accessing the x86-64 Time Stamp Counter (TSC)
 //! and related timer functionality.
 
-#![no_std]
 
 use crate::kernel::arch::amd64;
 

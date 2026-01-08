@@ -8,7 +8,6 @@
 //!
 //! Minimal stub for register access functionality.
 
-#![no_std]
 
 /// Read a 32-bit register
 #[inline]

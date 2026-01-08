@@ -9,7 +9,6 @@
 //! This module handles bringing up additional harts (CPU cores)
 //! and managing MP initialization for RISC-V systems.
 
-#![no_std]
 
 use crate::arch::riscv64::registers;
 use crate::arch::riscv64::registers::csr;

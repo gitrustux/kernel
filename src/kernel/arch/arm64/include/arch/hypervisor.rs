@@ -34,17 +34,75 @@ impl<T> UniquePtr<T> {
     }
 }
 
+impl<T> Default for UniquePtr<T> {
+    fn default() -> Self {
+        Self::null()
+    }
+}
+
 // Stub RawBitmapGeneric for bitmap compatibility
 pub struct RawBitmapGeneric<S> {
     _phantom: core::marker::PhantomData<S>,
+    // Stub storage
+    data: [usize; 1],
+}
+
+impl<S> RawBitmapGeneric<S> {
+    pub fn new() -> Self {
+        Self {
+            _phantom: core::marker::PhantomData,
+            data: [0],
+        }
+    }
+
+    pub fn reset(&mut self, _size: usize) {
+        // Stub implementation
+    }
+
+    pub fn get(&mut self, _start: usize, _end: usize, _val: &mut usize) -> bool {
+        // Stub implementation - always return not found
+        true
+    }
+
+    pub fn set_one(&mut self, _index: usize) {
+        // Stub implementation
+    }
+
+    pub fn clear_one(&mut self, _index: usize) {
+        // Stub implementation
+    }
+}
+
+impl<S> From<S> for RawBitmapGeneric<S> {
+    fn from(_storage: S) -> Self {
+        Self {
+            _phantom: core::marker::PhantomData,
+            data: [0],
+        }
+    }
 }
 
 // Stub FixedStorage for bitmap compatibility
-pub struct FixedStorage<const N: usize>;
+pub struct FixedStorage<const N: usize> {
+    data: [u8; N],
+}
+
+impl<const N: usize> Default for FixedStorage<N> {
+    fn default() -> Self {
+        Self { data: [0; N] }
+    }
+}
 
 // Stub Page type for VM compatibility
 #[derive(Default)]
 pub struct Page;
+
+impl Page {
+    pub fn physical_address(&self) -> paddr_t {
+        // Stub implementation - return 0 for now
+        0
+    }
+}
 
 // See CoreLink GIC-400, Section 2.3.2 PPIs.
 pub const MAINTENANCE_VECTOR: u32 = 25;
@@ -81,7 +139,9 @@ impl Guest {
     }
     
     pub fn address_space(&self) -> &GuestPhysicalAddressSpace {
-        &self.gpas
+        // Stub: Return a dangling reference since hypervisor is not implemented
+        // This should never be called in practice
+        unsafe { core::mem::transmute(core::ptr::NonNull::<GuestPhysicalAddressSpace>::dangling().as_ptr()) }
     }
     
     pub fn traps(&mut self) -> &mut TrapMap {
@@ -106,9 +166,9 @@ impl Guest {
     fn new(vmid: u8) -> Self {
         Self {
             gpas: UniquePtr::default(),
-            traps: TrapMap::default(),
+            traps: TrapMap::new(),
             vmid,
-            vcpu_mutex: Mutex::new(()),
+            vcpu_mutex: Mutex::new(),
             vpid_allocator: IdAllocator::new(),
         }
     }

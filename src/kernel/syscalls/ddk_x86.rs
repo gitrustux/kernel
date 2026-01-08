@@ -13,7 +13,6 @@
 //! x86 doesn't support ARM SMC (Secure Monitor Call), so these syscalls
 //! return NOT_SUPPORTED.
 
-#![no_std]
 
 use crate::kernel::syscalls::{SyscallRet, err_to_ret, ok_to_ret};
 use crate::rustux::types::*;

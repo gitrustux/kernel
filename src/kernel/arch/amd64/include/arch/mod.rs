@@ -6,7 +6,6 @@
 
 //! Architecture-specific includes
 
-#![no_std]
 
 // Re-export amd64 module
 pub mod amd64;

@@ -9,7 +9,6 @@
 //! This module provides the AMD64-specific implementation of the
 //! Architecture Abstraction Layer (AAL).
 
-#![no_std]
 
 // FFI bridge to C code (sys_x86.c)
 pub mod ffi;

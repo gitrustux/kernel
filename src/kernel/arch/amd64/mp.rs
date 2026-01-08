@@ -8,7 +8,6 @@
 //!
 //! This module provides support for multiple CPU cores on x86-64.
 
-#![no_std]
 
 use core::sync::atomic::{AtomicU32, Ordering};
 

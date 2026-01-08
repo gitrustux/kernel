@@ -8,7 +8,6 @@
 //!
 //! Minimal stub for syscall exception handling.
 
-#![no_std]
 
 /// Exception context for system calls
 #[repr(C)]

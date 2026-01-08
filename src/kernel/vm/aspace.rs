@@ -20,7 +20,6 @@
 //!
 //! Address spaces use interior mutability with mutexes to allow safe concurrent access.
 
-#![no_std]
 
 use crate::kernel::vm::layout::*;
 use crate::kernel::vm::page_table::*;

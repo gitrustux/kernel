@@ -9,7 +9,6 @@
 //! This module provides functions for mapping device memory into
 //! the kernel address space for accessing peripherals.
 
-#![no_std]
 
 use crate::arch::riscv64::mmu;
 use crate::rustux::types::*;

@@ -20,7 +20,6 @@
 //! qemu-system-aarch64 -M virt -cpu cortex-a57 -m 1G
 //! ```
 
-#![no_std]
 
 #[cfg(target_arch = "aarch64")]
 pub mod arm_gic;

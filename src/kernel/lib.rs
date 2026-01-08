@@ -10,6 +10,10 @@
 //! the kernel.
 
 #![no_std]
+#![allow(dead_code)]
+#![allow(unused_imports)]
+#![allow(unused_variables)]
+#![allow(unused_unsafe)]
 
 use core::fmt;
 

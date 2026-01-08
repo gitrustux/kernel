@@ -27,7 +27,6 @@
 //! dpc.queue(true)?;
 //! ```
 
-#![no_std]
 
 use crate::kernel::sync::{Event, EventFlags, Mutex};
 use crate::kernel::thread::ThreadId;

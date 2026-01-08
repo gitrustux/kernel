@@ -11,7 +11,6 @@
 //! This module handles all x86 exceptions including page faults,
 //! general protection faults, and debug exceptions.
 
-#![no_std]
 
 use crate::kernel::arch::amd64;
 use crate::kernel::arch::amd64::apic;

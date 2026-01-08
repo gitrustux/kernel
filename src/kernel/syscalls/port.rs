@@ -23,7 +23,6 @@
 //! - Deadline-based waiting
 //! - Key-based packet cancellation
 
-#![no_std]
 
 use crate::kernel::object::{Handle, HandleTable, KernelObjectBase, ObjectType, Rights};
 use crate::kernel::sync::Mutex;

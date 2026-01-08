@@ -10,7 +10,6 @@
 //! This module provides functions for idle, MSR access,
 //! and monitor/mwait support.
 
-#![no_std]
 
 use crate::kernel::arch::amd64::asm;
 use crate::kernel::arch::amd64::mp;

@@ -9,7 +9,6 @@
 //! This module provides wrapper functions for x86 interrupt handling,
 //! wrapping the APIC (Advanced Programmable Interrupt Controller) functions.
 
-#![no_std]
 
 use crate::kernel::arch::amd64;
 use crate::kernel::arch::amd64::apic;

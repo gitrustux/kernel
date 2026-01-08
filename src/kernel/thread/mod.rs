@@ -39,7 +39,6 @@
 //! Thread::yield_current();
 //! ```
 
-#![no_std]
 
 use crate::kernel::vm::stacks::*;
 use crate::kernel::vm::aspace::*;
@@ -271,7 +270,7 @@ pub struct ArchContext {
 pub struct ArchData {
     /// Pointer to suspended general registers
     #[cfg(target_arch = "aarch64")]
-    pub suspended_general_regs: *const crate::kernel::arch::arm64::RiscvIframe,
+    pub suspended_general_regs: *mut crate::kernel::arch::arm64::RiscvIframe,
 
     /// Stack pointer (for aarch64)
     #[cfg(target_arch = "aarch64")]
@@ -347,7 +346,7 @@ impl ArchData {
     pub const fn new() -> Self {
         Self {
             #[cfg(target_arch = "aarch64")]
-            suspended_general_regs: core::ptr::null(),
+            suspended_general_regs: core::ptr::null_mut(),
             #[cfg(target_arch = "aarch64")]
             sp: 0,
             #[cfg(target_arch = "aarch64")]
@@ -363,7 +362,7 @@ impl ArchData {
             #[cfg(target_arch = "aarch64")]
             thread_pointer_location: 0u64,
             #[cfg(target_arch = "aarch64")]
-            debug_state: crate::kernel::arch::arm64::thread::Arm64DebugState::default(),
+            debug_state: unsafe { core::mem::zeroed() },
             #[cfg(target_arch = "aarch64")]
             fpstate: core::ptr::null_mut(),
             #[cfg(target_arch = "x86_64")]
@@ -731,7 +730,7 @@ pub fn current_thread_id() -> ThreadId {
     unsafe {
         #[cfg(target_arch = "aarch64")]
         {
-            let thread_ptr = crate::kernel::arch::arm64::get_current_thread();
+            let thread_ptr = crate::kernel::arch::arm64::include::arch::current_thread::get_current_thread();
             if thread_ptr.is_null() {
                 return TID_INVALID;
             }

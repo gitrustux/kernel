@@ -8,7 +8,6 @@
 //!
 //! Tests for lock dependency tracking and validation.
 
-#![no_std]
 
 use crate::kernel::tests::runner::*;
 use crate::kernel::sync;

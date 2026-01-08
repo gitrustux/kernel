@@ -9,7 +9,6 @@
 //! This module implements the AAL traits for RISC-V (RV64GC),
 //! providing the architecture-specific implementations.
 
-#![no_std]
 
 use crate::kernel::arch::arch_traits::*;
 use crate::arch::riscv64;

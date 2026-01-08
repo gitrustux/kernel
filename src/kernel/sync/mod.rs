@@ -21,7 +21,6 @@
 //! All primitives are designed to work with the scheduler and provide
 //! proper integration with the thread blocking/waking mechanisms.
 
-#![no_std]
 
 pub mod mutex;
 pub mod event;

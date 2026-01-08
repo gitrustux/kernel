@@ -9,7 +9,6 @@
 //! This module provides functions for saving and restoring
 //! floating point state during context switches.
 
-#![no_std]
 
 use crate::arch::riscv64::registers;
 use crate::arch::riscv64::registers::csr;

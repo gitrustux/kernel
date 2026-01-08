@@ -9,7 +9,6 @@
 //! This module provides status codes and error types used throughout
 //! the Rustux kernel.
 
-#![no_std]
 
 // Use the rx_status_t from rustux::types
 pub use crate::rustux::types::rx_status_t;

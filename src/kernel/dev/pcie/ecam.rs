@@ -9,7 +9,6 @@
 //! This module provides functions for managing the ECAM region
 //! and mapping it into the kernel address space.
 
-#![no_std]
 
 use crate::kernel::dev::pcie::config::*;
 use crate::kernel::dev::pcie::constants::*;

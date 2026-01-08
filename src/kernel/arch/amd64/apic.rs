@@ -8,7 +8,6 @@
 //!
 //! This module provides support for the Local APIC and I/O APIC.
 
-#![no_std]
 
 use crate::rustux::types::*;
 

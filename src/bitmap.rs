@@ -8,7 +8,6 @@
 //!
 //! This is a minimal stub for bitmap functionality.
 
-#![no_std]
 
 // Raw bitmap module
 pub mod raw_bitmap {

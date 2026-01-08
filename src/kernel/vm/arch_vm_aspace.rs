@@ -9,7 +9,6 @@
 //! This module provides the interface for architecture-specific
 //! address space implementations.
 
-#![no_std]
 
 use crate::rustux::types::*;
 

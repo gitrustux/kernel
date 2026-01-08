@@ -42,7 +42,7 @@ pub fn arch_cycle_count() -> u64 {
 
 #[inline(always)]
 pub fn arch_cpu_features() -> u32 {
-    unsafe { feature::arm64_features }
+    (unsafe { feature::arm64_features }) as u32
 }
 
 #[inline(always)]

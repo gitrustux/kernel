@@ -22,7 +22,6 @@
 //! - Fixed capacity
 //! - Non-blocking reads/writes
 
-#![no_std]
 
 use crate::kernel::object::{Handle, HandleTable, KernelObjectBase, ObjectType, Rights};
 use crate::kernel::sync::Mutex;

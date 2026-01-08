@@ -38,7 +38,6 @@
 //! scheduler.yield_current();
 //! ```
 
-#![no_std]
 
 use crate::kernel::thread::{Thread, ThreadId, ThreadState, BlockReason, PRIORITY_DEFAULT};
 use crate::rustux::types::*;

@@ -25,7 +25,6 @@
 //! event.unsignal();
 //! ```
 
-#![no_std]
 
 use crate::kernel::sync::wait_queue::WaitQueue;
 use crate::kernel::sync::Mutex;

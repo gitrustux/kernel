@@ -27,9 +27,10 @@ fn is_fpu_enabled(cpacr: u32) -> bool {
 }
 
 fn arm64_fpu_load_state(t: &Thread) {
-    let fpstate = &t.arch.fpstate;
+    let fpstate_ptr = t.arch.fpstate;
+    let fpstate = unsafe { &*(fpstate_ptr as *const fpstate) };
 
-    LTRACEF!("cpu {}, thread {}, load fpstate {:p}\n", arch_curr_cpu_num(), t.name, fpstate);
+    LTRACEF!("cpu {}, thread {}, load fpstate {:p}\n", arch_curr_cpu_num(), t.name, fpstate_ptr);
 
     // Static assertion to ensure size is correct
     assert_eq!(core::mem::size_of_val(&fpstate.regs), 16 * 32);
@@ -63,9 +64,10 @@ fn arm64_fpu_load_state(t: &Thread) {
 
 // NOTE: no_sanitize attribute removed - not a valid Rust attribute
 fn arm64_fpu_save_state(t: &mut Thread) {
-    let fpstate = &mut t.arch.fpstate;
+    let fpstate_ptr = t.arch.fpstate;
+    let fpstate = unsafe { &mut *(fpstate_ptr as *mut fpstate) };
 
-    LTRACEF!("cpu {}, thread {}, save fpstate {:p}\n", arch_curr_cpu_num(), t.name, fpstate);
+    LTRACEF!("cpu {}, thread {}, save fpstate {:p}\n", arch_curr_cpu_num(), t.name, fpstate_ptr);
 
     unsafe {
         core::arch::asm!(
@@ -92,10 +94,10 @@ fn arm64_fpu_save_state(t: &mut Thread) {
         // 64-bit source register.
         let mut fpcr: u64 = 0;
         let mut fpsr: u64 = 0;
-        
+
         core::arch::asm!("mrs {}, fpcr", out(reg) fpcr);
         core::arch::asm!("mrs {}, fpsr", out(reg) fpsr);
-        
+
         fpstate.fpcr = fpcr as u32;
         fpstate.fpsr = fpsr as u32;
     }
@@ -147,8 +149,8 @@ pub extern "C" fn arm64_fpu_exception(iframe: *mut arm64::arm64_iframe_long, exc
         core::arch::asm!("isb sy");
 
         // load the state from the current cpu
-        if likely(t) != core::ptr::null_mut() {
-            arm64_fpu_load_state(&*t);
+        if let Some(thread) = t {
+            arm64_fpu_load_state(&*thread);
         }
     }
 }

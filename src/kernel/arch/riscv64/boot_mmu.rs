@@ -10,7 +10,6 @@
 //! called from start.S while running in physical address space with
 //! the MMU disabled. This code should be position independent.
 
-#![no_std]
 
 use crate::arch::riscv64::mmu;
 use crate::arch::riscv64::registers;

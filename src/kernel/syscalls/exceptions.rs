@@ -18,7 +18,6 @@
 //! Exception handling allows debuggers and crash reporters to receive
 //! notifications when processes/threads encounter exceptions.
 
-#![no_std]
 
 use crate::kernel::object::{Handle, HandleTable, ObjectType, Rights};
 use crate::kernel::syscalls::{SyscallRet, err_to_ret, ok_to_ret};

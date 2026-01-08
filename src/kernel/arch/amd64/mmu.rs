@@ -8,7 +8,6 @@
 //!
 //! This module provides page table management for x86-64.
 
-#![no_std]
 
 use crate::rustux::types::*;
 

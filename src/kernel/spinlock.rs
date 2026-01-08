@@ -6,7 +6,6 @@
 
 //! Spinlock primitives
 
-#![no_std]
 
 /// Re-export SpinLock from sync module
 pub use crate::kernel::sync::spin::SpinLock;

@@ -8,7 +8,6 @@
 //!
 //! This module implements RISC-V-specific system power control operations.
 
-#![no_std]
 
 use crate::kernel::syscalls::{SyscallRet, err_to_ret, ok_to_ret};
 use crate::rustux::types::*;

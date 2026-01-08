@@ -23,7 +23,6 @@
 //! - [`aspace`] - Address space management
 //! - [`vmo`] - Virtual Memory Objects
 
-#![no_std]
 
 pub mod layout;
 pub mod page_table;

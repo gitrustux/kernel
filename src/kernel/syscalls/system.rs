@@ -23,7 +23,6 @@
 //! - CPU hotplug support
 //! - Memory execution for kernel updates
 
-#![no_std]
 
 use crate::kernel::object::{Handle, HandleTable, ObjectType, Rights};
 use crate::kernel::usercopy::{copy_from_user, copy_to_user, UserPtr};

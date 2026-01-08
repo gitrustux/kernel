@@ -34,7 +34,6 @@
 //! pmm_free_page(page);
 //! ```
 
-#![no_std]
 
 use crate::rustux::types::*;
 use crate::rustux::types::err::*;

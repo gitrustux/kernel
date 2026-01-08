@@ -8,7 +8,6 @@
 //!
 //! This module contains the 16-bit code used for booting secondary CPUs.
 
-#![no_std]
 
 /// Bootstrap code for secondary CPUs
 ///

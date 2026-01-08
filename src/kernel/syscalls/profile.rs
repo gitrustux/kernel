@@ -18,7 +18,6 @@
 //! Profiles allow privileged processes to control CPU scheduling behavior,
 //! such as CPU affinity, priority, and scheduling parameters.
 
-#![no_std]
 
 use crate::kernel::object::{Handle, HandleTable, ObjectType, Rights, KernelObjectBase};
 use crate::kernel::usercopy::{copy_from_user, UserPtr};

@@ -22,20 +22,20 @@ use core::arch::asm;
 #[no_mangle]
 pub unsafe extern "C" fn arch_spin_lock(lock: *mut spin_lock_t) {
     let val = arch_curr_cpu_num() + 1;
-    let mut temp: u64;
+    let mut temp: u32;
 
     // This is a direct translation of the assembly in the C++ version.
     // It uses inline assembly to implement a spinlock with proper memory barriers.
     asm!(
         "sevl",
         "1: wfe",
-        "ldaxr {temp}, [{lock}]",
-        "cbnz {temp}, 1b",
-        "stxr w{temp}, {val}, [{lock}]",
-        "cbnz w{temp}, 1b",
+        "ldaxr {temp:w}, [{lock}]",
+        "cbnz {temp:w}, 1b",
+        "stxr {temp:w}, {val:w}, [{lock}]",
+        "cbnz {temp:w}, 1b",
         temp = out(reg) temp,
-        lock = in(reg) &(*lock).value,
-        val = in(reg) val,
+        lock = in(reg) (*lock).value,
+        val = in(reg) val as u32,
         options(nostack)
     );
 }
@@ -53,17 +53,17 @@ pub unsafe extern "C" fn arch_spin_lock(lock: *mut spin_lock_t) {
 #[no_mangle]
 pub unsafe extern "C" fn arch_spin_trylock(lock: *mut spin_lock_t) -> i32 {
     let val = arch_curr_cpu_num() + 1;
-    let mut out: u64;
+    let mut out: u32;
 
     // Direct translation of the assembly in the C++ version
     asm!(
-        "ldaxr {out}, [{lock}]",
-        "cbnz {out}, 1f",
-        "stxr w{out}, {val}, [{lock}]",
+        "ldaxr {out:w}, [{lock}]",
+        "cbnz {out:w}, 1f",
+        "stxr {out:w}, {val:w}, [{lock}]",
         "1:",
         out = out(reg) out,
-        lock = in(reg) &(*lock).value,
-        val = in(reg) val,
+        lock = in(reg) (*lock).value,
+        val = in(reg) val as u32,
         options(nostack)
     );
 

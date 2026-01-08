@@ -22,7 +22,6 @@
 //! - Both auto-reset and manual-reset modes supported
 //! - Multiple threads can wait on same event
 
-#![no_std]
 
 use crate::kernel::object::event::{self, Event, EventPair, EventFlags};
 use crate::kernel::object::{Handle, HandleTable, KernelObjectBase, ObjectType, Rights};

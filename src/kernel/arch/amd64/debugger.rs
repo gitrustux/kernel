@@ -10,7 +10,6 @@
 //! for debugging purposes, including general-purpose registers and
 //! vector registers (SSE, AVX, etc.).
 
-#![no_std]
 
 use crate::kernel::arch::amd64::registers::*;
 use crate::kernel::arch::amd64::X86Iframe;

@@ -53,13 +53,19 @@ extern "C" {
 /// * `entry_point` - Entry point address for the thread
 pub fn arch_thread_initialize(t: &mut Thread, entry_point: vaddr_t) {
     // zero out the entire arch state
-    t.arch = ArchThread::default();
+    // Note: ArchThread is now embedded in ArchData, so we initialize the fields
+    t.arch.sp = 0;
+    t.arch.stack_guard = 0;
+    t.arch.unsafe_sp = 0;
+    t.arch.current_percpu_ptr = core::ptr::null_mut();
+    t.arch.track_debug_state = false;
+    t.arch.debug_state = Default::default();
 
     // create a default stack frame on the stack
-    let mut stack_top = {
+    let mut stack_top: vaddr_t = {
         let stack_guard = t.stack.lock();
         if let Some(ref stack) = *stack_guard {
-            stack.top
+            stack.top as vaddr_t
         } else {
             0  // Fallback if no stack allocated
         }
@@ -70,11 +76,11 @@ pub fn arch_thread_initialize(t: &mut Thread, entry_point: vaddr_t) {
     {
         let mut stack_guard = t.stack.lock();
         if let Some(ref mut stack) = *stack_guard {
-            stack.top = stack_top;
+            stack.top = stack_top as usize;
         }
     }
 
-    let frame = (stack_top as *mut ContextSwitchFrame).offset(-1);
+    let frame = unsafe { (stack_top as *mut ContextSwitchFrame).offset(-1) };
 
     // fill in the entry point
     unsafe {
@@ -84,14 +90,14 @@ pub fn arch_thread_initialize(t: &mut Thread, entry_point: vaddr_t) {
     // This is really a global (boot-time) constant value.
     // But it's stored in each thread struct to satisfy the
     // compiler ABI (TPIDR_EL1 + RX_TLS_STACK_GUARD_OFFSET).
-    t.arch.stack_guard = get_current_thread().arch.stack_guard;
+    t.arch.stack_guard = unsafe { get_current_thread() }.arch.stack_guard;
 
     // set the stack pointer
-    t.arch.sp = frame as vaddr_t;
-    
+    t.arch.sp = frame as usize;
+
     #[cfg(feature = "safe_stack")]
     {
-        t.arch.unsafe_sp = round_down(t.stack.unsafe_base + t.stack.size, 16);
+        t.arch.unsafe_sp = round_down(t.stack.unsafe_base + t.stack.size, 16) as usize;
     }
 
     // Initialize the debug state to a valid initial state.
@@ -112,7 +118,7 @@ pub extern "C" fn arch_thread_construct_first(t: &mut Thread) {
     // Propagate the values from the fake arch_thread that the thread
     // pointer points to now (set up in start.S) into the real thread
     // structure being set up now.
-    let fake = get_current_thread();
+    let fake = unsafe { get_current_thread() };
     t.arch.stack_guard = fake.arch.stack_guard;
     t.arch.unsafe_sp = fake.arch.unsafe_sp;
 
@@ -126,7 +132,7 @@ pub extern "C" fn arch_thread_construct_first(t: &mut Thread) {
     // happens to have changed. (We're assuming that the compiler doesn't
     // decide to cache the TPIDR_EL1 value across this function call, which
     // would be pointless since it's just one instruction to fetch it afresh.)
-    set_current_thread(t);
+    unsafe { set_current_thread(t); }
 }
 
 /// Switch context to a different thread
@@ -139,13 +145,11 @@ pub extern "C" fn arch_thread_construct_first(t: &mut Thread) {
 #[cfg_attr(feature = "safe_stack", no_safe_stack)]
 pub extern "C" fn arch_context_switch(oldthread: &mut Thread, newthread: &mut Thread) {
     if LOCAL_TRACE {
-        ltrace!("old {:p} ({:?}), new {:p} ({:?})\n",
+        ltrace!("old {:p}, new {:p}\n",
                 oldthread as *mut Thread,
-                oldthread.name.as_ptr(),
-                newthread as *mut Thread,
-                newthread.name.as_ptr());
+                newthread as *mut Thread);
     }
-    
+
     unsafe {
         __dsb(ARM_MB_SY); /* broadcast tlb operations in case the thread moves to another cpu */
     }
@@ -158,7 +162,11 @@ pub extern "C" fn arch_context_switch(oldthread: &mut Thread, newthread: &mut Th
 
         arm64_fpu_context_switch(oldthread as *const Thread, newthread as *const Thread);
         arm64_debug_state_context_switch(oldthread, newthread);
-        arm64_context_switch(&mut oldthread.arch.sp, newthread.arch.sp);
+        // Convert usize to u64 for the assembly function
+        let mut old_sp = oldthread.arch.sp as u64;
+        let new_sp = newthread.arch.sp as u64;
+        arm64_context_switch(&mut old_sp, new_sp);
+        oldthread.arch.sp = old_sp as usize;
     }
 }
 
@@ -168,7 +176,9 @@ pub extern "C" fn arch_context_switch(oldthread: &mut Thread, newthread: &mut Th
 ///
 /// * `t` - Thread to dump information for
 pub fn arch_dump_thread(t: &Thread) {
-    if t.state != ThreadState::Running {
+    use crate::kernel::thread::ThreadState;
+    let state = t.state.lock();
+    if *state != ThreadState::Running {
         dprintf!(crate::kernel::debug::INFO, "\tarch: ");
         dprintf!(crate::kernel::debug::LogLevel::Info, "sp {:#x}\n", t.arch.sp);
     }
@@ -276,7 +286,7 @@ const INFO: i32 = 0; // Log level for info messages
 
 // Define the hardware breakpoint structure
 #[repr(C)]
-#[derive(Copy, Clone, Default)]
+#[derive(Copy, Clone, Default, Debug)]
 pub struct Arm64HwBreakpoint {
     pub dbgbcr: u32,
     pub dbgbvr: u64,
@@ -284,7 +294,7 @@ pub struct Arm64HwBreakpoint {
 
 // Define the debug state structure
 #[repr(C)]
-#[derive(Copy, Clone, Default)]
+#[derive(Copy, Clone, Default, Debug)]
 pub struct Arm64DebugState {
     pub hw_bps: [Arm64HwBreakpoint; ARM64_MAX_HW_BREAKPOINTS],
 }

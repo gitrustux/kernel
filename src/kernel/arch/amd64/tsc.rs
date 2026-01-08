@@ -8,7 +8,6 @@
 //!
 //! This module provides access to the TSC for timing.
 
-#![no_std]
 
 use crate::rustux::types::*;
 

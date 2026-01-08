@@ -8,7 +8,6 @@
 //!
 //! This module provides I/O port bitmap management for x86.
 
-#![no_std]
 
 /// I/O port bitmap
 #[repr(C)]

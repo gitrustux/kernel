@@ -24,7 +24,6 @@
 //! let process = Process::new(Some(child_job.clone()), ...)?;
 //! ```
 
-#![no_std]
 
 use crate::kernel::sync::Mutex;
 use crate::rustux::types::*;

@@ -9,7 +9,6 @@
 //! This module provides platform-specific initialization and functions.
 //! It wraps the existing C++ platform code with a Rust interface.
 
-#![no_std]
 
 // ============================================================================
 // Halt Constants

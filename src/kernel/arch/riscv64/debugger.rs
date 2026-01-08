@@ -9,7 +9,6 @@
 //! This module provides functions for reading and writing thread state
 //! for debugging purposes, including general-purpose registers.
 
-#![no_std]
 
 use crate::arch::riscv64::RiscvIframe;
 use crate::kernel::thread;

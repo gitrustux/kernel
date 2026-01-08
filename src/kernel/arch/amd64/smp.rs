@@ -9,7 +9,6 @@
 //! This module handles bringing up additional CPU cores (APs)
 //! and managing SMP initialization.
 
-#![no_std]
 
 use crate::kernel::arch::amd64;
 use crate::kernel::arch::amd64::apic;

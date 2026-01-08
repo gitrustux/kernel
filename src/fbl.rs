@@ -9,7 +9,6 @@
 //! This module provides minimal stubs for FBL types and utilities
 //! that are used throughout the kernel.
 
-#![no_std]
 
 // Atomic types from FBL
 pub mod atomic {

@@ -9,7 +9,6 @@
 //! This module provides MSR (Model Specific Register) and other
 //! register definitions for x86-64 processors.
 
-#![no_std]
 
 /// MSR (Model Specific Register) indices
 pub mod msr {

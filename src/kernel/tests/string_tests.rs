@@ -8,7 +8,6 @@
 //!
 //! Tests for string operations (memcpy, memset, etc.).
 
-#![no_std]
 
 use crate::kernel::tests::runner::*;
 use crate::kernel::vm;

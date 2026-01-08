@@ -1,7 +1,6 @@
 // Rustux Authors 2025
 //! This file contains definitions for virtual machine management in Rustux.
 
-#![no_std]
 
 use alloc::sync::Arc;
 use core::ffi::c_void;

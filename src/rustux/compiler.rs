@@ -8,8 +8,6 @@
 //!
 //! This module provides compiler-specific attributes and utilities.
 
-#![no_std]
-
 /// Compiler barrier
 #[inline(always)]
 pub fn compiler_barrier() {

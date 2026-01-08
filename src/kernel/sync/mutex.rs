@@ -32,7 +32,6 @@
 //! mutex.unlock();
 //! ```
 
-#![no_std]
 
 use crate::kernel::thread::{Thread, ThreadId};
 use crate::rustux::types::*;

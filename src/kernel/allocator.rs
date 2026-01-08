@@ -9,7 +9,6 @@
 //! This module provides a linked list allocator for the kernel heap.
 //! It supports allocation, deallocation, and memory reuse.
 
-#![no_std]
 
 use alloc::alloc::{GlobalAlloc, Layout};
 use core::sync::atomic::{AtomicUsize, Ordering};

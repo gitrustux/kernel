@@ -25,7 +25,6 @@
 //! - Protection flags (READ/WRITE/EXECUTE)
 //! - Address space management with proper alignment
 
-#![no_std]
 
 use crate::kernel::object::vmo::{self, Vmo, VmoId};
 use crate::kernel::object::{Handle, HandleTable, KernelObjectBase, ObjectType, Rights};

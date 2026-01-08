@@ -24,7 +24,6 @@
 //! timer.wait()?;
 //! ```
 
-#![no_std]
 
 use crate::kernel::sync::event::{Event, EventFlags};
 use crate::kernel::sync::Mutex;

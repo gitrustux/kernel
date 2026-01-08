@@ -6,7 +6,6 @@
 
 //! x86-64 Interrupt Descriptor Table (IDT)
 
-#![no_std]
 
 /// IDT entry structure
 #[repr(C, packed)]

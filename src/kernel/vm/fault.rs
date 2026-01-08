@@ -27,7 +27,6 @@
 //! 6. Resume execution
 //! ```
 
-#![no_std]
 
 use crate::kernel::vm::aspace::AddressSpace;
 use crate::kernel::vm::page_table::*;

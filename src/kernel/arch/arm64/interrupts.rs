@@ -10,7 +10,6 @@
 //! Interrupt Controller (GIC), including masking/unmasking IRQs,
 //! sending end-of-interrupt signals, and sending inter-processor interrupts.
 
-#![no_std]
 
 use crate::arch::arm64;
 
@@ -365,7 +364,7 @@ pub fn int_handler_finish(_state: int_handler_saved_state_t) {
 // ============================================================================
 
 /// Send IPI to target CPUs
-pub fn arm64_send_ipi(_target: u32, _ipi_type: u32) {
+pub fn arm64_send_ipi(_target: u64, _ipi_type: u32) {
     // TODO: Implement IPI sending via GIC
     // This would use gic_send_sgi or similar mechanism
 }

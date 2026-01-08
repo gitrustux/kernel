@@ -15,8 +15,27 @@ use crate::dprintf;
 // saved feature bitmap
 pub static mut arm64_features: u64 = 0;
 
-static mut cache_info: [arm64::arm64_cache_info_t; arm64::SMP_MAX_CPUS as usize] =
-    [arm64::arm64_cache_info_t::default(); arm64::SMP_MAX_CPUS as usize];
+static mut cache_info: [arm64::arm64_cache_info_t; arm64::SMP_MAX_CPUS as usize] = unsafe {
+    const ZERO_DESC: arm64::arm64_cache_desc_t = arm64::arm64_cache_desc_t {
+        ctype: 0,
+        write_through: false,
+        write_back: false,
+        read_alloc: false,
+        write_alloc: false,
+        num_sets: 0,
+        associativity: 0,
+        line_size: 0,
+    };
+    const UNINIT: arm64::arm64_cache_info_t = arm64::arm64_cache_info_t {
+        inner_boundary: 0,
+        lou_u: 0,
+        loc: 0,
+        lou_is: 0,
+        level_data_type: [ZERO_DESC; 7],
+        level_inst_type: [ZERO_DESC; 7],
+    };
+    [UNINIT; arm64::SMP_MAX_CPUS as usize]
+};
 
 // cache size parameters cpus, default to a reasonable minimum
 pub static mut arm64_zva_size: u32 = 32;
@@ -141,25 +160,34 @@ fn midr_to_core(midr: u32, str_buf: &mut [u8]) -> usize {
         ('C', 0xa1) => "Cavium CN88XX",
         ('C', 0xaf) => "Cavium CN99XX",
         _ => {
-            // Unknown CPU
-            return snprintf(
-                str_buf,
-                "Unknown implementer {} partnum 0x{:x} r{}p{}",
-                implementer as u8 as char,
-                partnum,
-                variant,
-                revision
-            );
+            // Unknown CPU - format directly using write_to_slice
+            use core::fmt::Write;
+            let str_buf_len = str_buf.len();
+            let mut writer = WriteToSlice { slice: str_buf, offset: 0 };
+            let _ = write!(&mut writer, "Unknown implementer {} partnum 0x{:x} r{}p{}",
+                          implementer as u8 as char, partnum, variant, revision);
+            // Null terminate
+            if writer.offset < str_buf_len {
+                writer.slice[writer.offset] = 0;
+            } else if str_buf_len > 0 {
+                writer.slice[str_buf_len - 1] = 0;
+            }
+            return writer.offset;
         }
     };
 
-    snprintf(
-        str_buf,
-        "{} r{}p{}",
-        partnum_str,
-        variant,
-        revision
-    )
+    // Format directly using write_to_slice
+    use core::fmt::Write;
+    let str_buf_len = str_buf.len();
+    let mut writer = WriteToSlice { slice: str_buf, offset: 0 };
+    let _ = write!(&mut writer, "{} r{}p{}", partnum_str, variant, revision);
+    // Null terminate
+    if writer.offset < str_buf_len {
+        writer.slice[writer.offset] = 0;
+    } else if str_buf_len > 0 {
+        writer.slice[str_buf_len - 1] = 0;
+    }
+    writer.offset
 }
 
 fn print_cpu_info() {
@@ -189,11 +217,11 @@ fn print_cpu_info() {
 }
 
 // Helper function for string formatting that mimics C's snprintf
-fn snprintf(buffer: &mut [u8], format_str: &str, args: impl core::fmt::Display) -> usize {
+fn snprintf(buffer: &mut [u8], format_str: &str) -> usize {
     use core::fmt::Write;
 
     let mut writer = WriteToSlice { slice: buffer, offset: 0 };
-    let _ = write!(&mut writer, "{}", args);
+    let _ = write!(&mut writer, "{}", format_str);
 
     // Ensure null termination for C interop
     let offset = writer.offset;
@@ -329,12 +357,12 @@ pub fn arm64_feature_init() {
 }
 
 #[inline]
-pub fn arm64_feature_test(feature: u32) -> bool {
+pub fn arm64_feature_test(feature: u64) -> bool {
     unsafe { (arm64_features & feature) != 0 }
 }
 
 fn print_feature() {
-    const FEATURES: &[(&str, u32)] = &[
+    const FEATURES: &[(&str, u64)] = &[
         ("fp", arm64::RX_ARM64_FEATURE_ISA_FP),
         ("asimd", arm64::RX_ARM64_FEATURE_ISA_ASIMD),
         ("aes", arm64::RX_ARM64_FEATURE_ISA_AES),
@@ -391,5 +419,5 @@ pub fn arm64_feature_debug(full: bool) {
 }
 /// Get ARM64 features bitmap
 pub fn arm64_get_features() -> u32 {
-    unsafe { arm64_features }
+    unsafe { arm64_features as u32 }
 }

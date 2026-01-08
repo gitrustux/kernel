@@ -18,7 +18,6 @@
 //! - **IPC Tests**: Inter-process communication
 //! - **Memory Tests**: Memory allocation and protection
 
-#![no_std]
 
 use crate::kernel::arch::arch_traits::*;
 use crate::kernel::vm;

@@ -25,7 +25,6 @@
 //! let (msg, handles) = channel_b.read(&mut buf)?;
 //! ```
 
-#![no_std]
 
 use crate::kernel::object::handle::{Handle, HandleId, Rights};
 use crate::kernel::sync::event::{Event, EventFlags};

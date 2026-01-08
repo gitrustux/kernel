@@ -10,9 +10,10 @@ use crate::vm::vm::is_user_address_range;
 /// Helper to get data_fault_resume pointer from current thread
 unsafe fn get_data_fault_resume_ptr() -> *mut u64 {
     if let Some(thread) = get_current_thread() {
-        // Use Arc::make_mut to get a mutable reference if needed
-        // This is unsafe and requires the caller to ensure proper synchronization
-        core::ptr::addr_of_mut!(thread.as_ref().arch.data_fault_resume) as *mut u64
+        // SAFETY: This is the current thread and we have exclusive access in this context
+        let thread_ptr: *const crate::kernel::thread::Thread = thread.as_ref();
+        let thread_mut: *mut crate::kernel::thread::Thread = thread_ptr as *mut crate::kernel::thread::Thread;
+        core::ptr::addr_of_mut!((*thread_mut).arch.data_fault_resume)
     } else {
         core::ptr::null_mut()
     }
@@ -40,7 +41,7 @@ pub unsafe extern "C" fn arch_copy_from_user(dst: *mut u8, src: *const u8, len: 
     // The assembly code just does memcpy with fault handling. This is
     // the security check that an address from the user is actually a
     // valid userspace address so users can't access kernel memory.
-    if !is_user_address_range(src as vaddr_t, len) {
+    if !is_user_address_range(src as usize, len) {
         return RX_ERR_INVALID_ARGS;
     }
 
@@ -49,7 +50,7 @@ pub unsafe extern "C" fn arch_copy_from_user(dst: *mut u8, src: *const u8, len: 
         dst as *mut core::ffi::c_void,
         src as *const core::ffi::c_void,
         len,
-        fault_resume,
+        fault_resume as *mut *mut core::ffi::c_void,
     )
 }
 
@@ -72,7 +73,7 @@ pub unsafe extern "C" fn arch_copy_from_user(dst: *mut u8, src: *const u8, len: 
 /// * Error code otherwise
 #[no_mangle]
 pub unsafe extern "C" fn arch_copy_to_user(dst: *mut u8, src: *const u8, len: usize) -> rx_status_t {
-    if !is_user_address_range(dst as vaddr_t, len) {
+    if !is_user_address_range(dst as usize, len) {
         return RX_ERR_INVALID_ARGS;
     }
 
@@ -81,7 +82,7 @@ pub unsafe extern "C" fn arch_copy_to_user(dst: *mut u8, src: *const u8, len: us
         dst as *mut core::ffi::c_void,
         src as *const core::ffi::c_void,
         len,
-        fault_resume,
+        fault_resume as *mut *mut core::ffi::c_void,
     )
 }
 

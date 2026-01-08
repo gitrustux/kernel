@@ -8,7 +8,6 @@
 //!
 //! Minimal stub for random number generation functionality.
 
-#![no_std]
 
 /// Get a random u32 value
 pub fn get_random_u32() -> u32 {

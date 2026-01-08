@@ -8,7 +8,6 @@
 //!
 //! Minimal stub for physical memory management.
 
-#![no_std]
 
 /// Allocate physical pages
 pub fn alloc_pages(_count: usize) -> u64 {

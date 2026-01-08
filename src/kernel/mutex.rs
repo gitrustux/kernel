@@ -8,7 +8,6 @@
 //!
 //! Minimal stub for mutex functionality.
 
-#![no_std]
 
 use crate::kernel::sync::spin::SpinMutex;
 

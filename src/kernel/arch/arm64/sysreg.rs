@@ -70,7 +70,7 @@ fn cmd_sysreg(argc: i32, argv: &[CmdArg], _flags: u32) -> i32 {
 
 #[cfg(target_arch = "aarch64")]
 pub fn init() {
-    static_command!("sysreg", "read armv8 system register", cmd_sysreg);
+    static_command!("sysreg", "read armv8 system register", "cmd_sysreg");
 }
 
 // External function declarations

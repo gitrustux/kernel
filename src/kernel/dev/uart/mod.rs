@@ -20,7 +20,6 @@
 //! - **Panic/Early mode**: Polling, used before interrupts are enabled
 //! - **Normal mode**: Interrupt-driven, uses RX buffer and TX events
 
-#![no_std]
 
 #[cfg(target_arch = "aarch64")]
 pub mod pl011;

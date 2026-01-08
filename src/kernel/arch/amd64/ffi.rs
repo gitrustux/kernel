@@ -12,7 +12,6 @@
 //! These functions are implemented in sys_x86.c and provide low-level
 //! operations that require special CPU instructions or are easier in C.
 
-#![no_std]
 
 use crate::rustux::types::*;
 

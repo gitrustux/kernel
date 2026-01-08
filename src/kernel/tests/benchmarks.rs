@@ -8,7 +8,6 @@
 //!
 //! Microbenchmarks for various kernel operations.
 
-#![no_std]
 
 use crate::kernel::tests::runner::*;
 use crate::kernel::vm;

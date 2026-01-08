@@ -8,7 +8,6 @@
 //!
 //! Minimal stub for heap allocation functionality.
 
-#![no_std]
 
 use alloc::alloc::{GlobalAlloc, Layout};
 

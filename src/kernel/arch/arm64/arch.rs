@@ -342,7 +342,9 @@ pub fn arch_init() {
     ltrace!("releasing {} secondary cpus\n", unsafe { SECONDARIES_TO_INIT });
 
     // Release the secondary cpus.
-    ARM_BOOT_CPU_LOCK.unlock();
+    unsafe {
+        ARM_BOOT_CPU_LOCK.unlock();
+    }
 
     // Flush the release of the lock, since the secondary cpus are running without cache on.
     unsafe {
@@ -415,8 +417,10 @@ pub extern "C" fn arm64_secondary_entry() {
     arm64_cpu_early_init();
 
     // Acquire and release the boot lock to ensure synchronization
-    let _guard = ARM_BOOT_CPU_LOCK.lock();
-    ARM_BOOT_CPU_LOCK.unlock();
+    unsafe {
+        let _guard = ARM_BOOT_CPU_LOCK.lock();
+        // Guard is dropped here, releasing the lock
+    }
 
     let cpu = mp::arch_curr_cpu_num();
     

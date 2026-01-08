@@ -9,7 +9,6 @@
 //! This module provides support for ARM's Generic Interrupt Controller.
 //! Currently only GICv3 is implemented.
 
-#![no_std]
 
 pub mod v3;
 

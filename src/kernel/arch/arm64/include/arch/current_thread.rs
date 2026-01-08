@@ -47,8 +47,8 @@ pub unsafe fn get_current_thread() -> *mut Thread {
 #[inline(always)]
 pub unsafe fn set_current_thread(t: *mut Thread) {
     // Calculate the location of thread_pointer_location within the thread struct
-    let tp_loc = &mut (*t).arch.thread_pointer_location as *mut u8;
-    
+    let tp_loc = core::ptr::addr_of_mut!((*t).arch.thread_pointer_location) as *mut u8;
+
     #[cfg(target_feature = "aarch64")]
     {
         // Write the pointer to TPIDR_EL1

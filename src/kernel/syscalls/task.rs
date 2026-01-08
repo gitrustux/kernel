@@ -27,7 +27,6 @@
 //! - Validates all parameters
 //! - Proper cleanup on errors
 
-#![no_std]
 
 use crate::kernel::object::job::{self, Job, JobId};
 use crate::kernel::process::{self, HandleRights, ObjectType, Process, ProcessFlags};

@@ -9,7 +9,6 @@
 //! This module implements test-related system calls used for testing
 //! the syscall mechanism.
 
-#![no_std]
 
 use crate::kernel::syscalls::{SyscallRet, err_to_ret, ok_to_ret};
 use crate::rustux::types::*;

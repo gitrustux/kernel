@@ -10,7 +10,6 @@
 //! Drivers are organized by category and can be selectively included based
 //! on the target platform.
 
-#![no_std]
 
 // UART drivers
 pub mod uart;

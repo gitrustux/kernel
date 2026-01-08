@@ -15,7 +15,6 @@
 //! - `rx_handle_duplicate` - Duplicate a handle
 //! - `rx_handle_replace` - Replace a handle
 
-#![no_std]
 
 use crate::kernel::object::{Handle, HandleOwner, HandleTable, Rights};
 use crate::kernel::usercopy::{copy_from_user, UserPtr};

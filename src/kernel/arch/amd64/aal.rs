@@ -9,7 +9,6 @@
 //! This module implements the AAL traits for AMD64 (x86-64),
 //! providing the architecture-specific implementations.
 
-#![no_std]
 
 use crate::kernel::arch::arch_traits::*;
 use crate::kernel::arch::amd64;

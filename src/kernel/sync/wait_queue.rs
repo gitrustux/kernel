@@ -32,7 +32,6 @@
 //! wq.wake_all();
 //! ```
 
-#![no_std]
 
 use crate::kernel::thread::ThreadId;
 use crate::rustux::types::*;

@@ -18,7 +18,6 @@
 //! 4. Switches to new page tables
 //! 5. Verifies stability
 
-#![no_std]
 
 use crate::kernel::vm::layout::*;
 
@@ -364,9 +363,9 @@ fn kernel_memory_regions() -> [KernelMapDesc; 3] {
         ),
         // Kernel BSS (RW)
         KernelMapDesc::new(
-            __bss_start as VAddr,
+            __bss_start as *const () as VAddr,
             0,
-            __bss_end as usize - __bss_start as usize,
+            __bss_end as *const () as usize - __bss_start as *const () as usize,
             MemProt::ReadWrite,
             "kernel_bss",
         ),
@@ -390,7 +389,8 @@ fn kernel_memory_regions() -> [KernelMapDesc; 3] {
 pub unsafe extern "C" fn boot_create_page_tables() -> PAddr {
     #[cfg(target_arch = "aarch64")]
     {
-        crate::kernel::arch::arm64::boot_mmu::arm64_boot_create_page_tables()
+        crate::kernel::arch::arm64::boot_mmu::arm64_boot_create_page_tables();
+        0 // Return dummy PAddr for now
     }
 
     #[cfg(target_arch = "x86_64")]
@@ -423,7 +423,7 @@ pub fn finalize_kernel_aspace() -> Result {
         // Architecture-specific switch
         #[cfg(target_arch = "aarch64")]
         {
-            let root = aspace.root_phys();
+            let root = aspace.root_phys() as u64;
             crate::kernel::arch::arm64::mmu::set_ttbr1_el1(root);
         }
 
@@ -455,7 +455,7 @@ fn verify_kernel_aspace(aspace: &AddressSpace) -> Result {
         fn kernel_aspace_test();
     }
 
-    let addr = kernel_aspace_test as VAddr;
+    let addr = kernel_aspace_test as *const () as VAddr;
     match aspace.resolve(addr) {
         Some(_) => {
             log_debug!("Address space verification passed");

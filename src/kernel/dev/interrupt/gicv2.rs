@@ -56,7 +56,6 @@
 //! | 0x0010 | GICC_EOIR| End of Interrupt Register      |
 //! | 0x1000 | GICC_DIR | Deactivate Interrupt Register    |
 
-#![no_std]
 
 use crate::arch::arm64::periphmap;
 use crate::kernel::mp::MpIpiType;

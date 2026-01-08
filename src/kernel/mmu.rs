@@ -9,7 +9,6 @@
 //! This module provides memory management functionality that works
 //! across all architectures.
 
-#![no_std]
 
 use crate::rustux::types::*;
 

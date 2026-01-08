@@ -8,7 +8,6 @@
 //!
 //! This module provides early MMU setup for ARM64 during boot.
 
-#![no_std]
 
 use crate::arch::arm64::mmu::*;
 

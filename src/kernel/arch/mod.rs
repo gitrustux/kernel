@@ -9,7 +9,6 @@
 //! This module provides architecture-specific implementations through
 //! a common abstraction layer.
 
-#![no_std]
 
 // Architecture traits (interface)
 pub mod arch_traits;

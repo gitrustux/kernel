@@ -9,7 +9,6 @@
 //! This module provides trace-specific macros that use the logging
 //! functionality from the debug module.
 
-#![no_std]
 
 /// Function entry trace macro
 #[macro_export]

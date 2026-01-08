@@ -6,7 +6,6 @@
 
 //! Virtual Memory Object (VMO) module
 
-#![no_std]
 
 /// Virtual Memory Object placeholder
 pub struct VmObject {

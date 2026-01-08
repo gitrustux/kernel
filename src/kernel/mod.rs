@@ -8,7 +8,6 @@
 //!
 //! This module contains the core kernel functionality.
 
-#![no_std]
 
 // Re-export commonly used types
 pub use crate::rustux::types::*;

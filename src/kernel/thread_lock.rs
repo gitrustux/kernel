@@ -8,7 +8,6 @@
 //!
 //! Minimal stub for thread locking functionality.
 
-#![no_std]
 
 /// Thread lock guard
 pub struct ThreadLock;

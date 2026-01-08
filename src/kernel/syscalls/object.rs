@@ -27,7 +27,6 @@
 //! - Supports many different object info types
 //! - Property get/set for various object types
 
-#![no_std]
 
 use crate::kernel::object::{Handle, HandleTable, KernelObjectBase, ObjectType, Rights};
 use crate::kernel::usercopy::{copy_from_user, copy_to_user, UserPtr};

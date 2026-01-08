@@ -8,7 +8,6 @@
 //!
 //! This module provides GDT and IDT setup functions.
 
-#![no_std]
 
 /// Setup the GDT (Global Descriptor Table)
 pub fn gdt_setup() {

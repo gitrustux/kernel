@@ -24,7 +24,6 @@
 //! - All operations validate handle rights before proceeding
 //! - User pointers are validated before access
 
-#![no_std]
 
 use crate::kernel::object::vmo::{self, Vmo, VmoFlags};
 use crate::kernel::object::{Handle, HandleTable, KernelObjectBase, ObjectType, Rights};

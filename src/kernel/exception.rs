@@ -8,7 +8,6 @@
 //!
 //! This module provides exception and interrupt handling functionality.
 
-#![no_std]
 
 use crate::rustux::types::*;
 

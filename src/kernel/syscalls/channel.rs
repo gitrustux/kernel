@@ -23,7 +23,6 @@
 //! - FIFO ordering guaranteed
 //! - Bounded queue with backpressure
 
-#![no_std]
 
 use crate::kernel::object::channel::{self, Channel, ChannelId, Message, MAX_MSG_HANDLES, MAX_MSG_SIZE};
 use crate::kernel::object::{Handle, HandleTable, KernelObjectBase, ObjectType, Rights};

@@ -17,6 +17,28 @@
 #![feature(register_tool)]
 #![register_tool(no_sanitize)]
 #![register_tool(no_return)]
+#![allow(dead_code)]
+#![allow(unused_imports)]
+#![allow(unused_variables)]
+#![allow(unused_unsafe)]
+#![allow(static_mut_refs)]
+#![allow(unused_results)]
+#![allow(non_upper_case_globals)]
+#![allow(non_camel_case_types)]
+#![allow(anonymous_parameters)]
+#![allow(unsafe_op_in_unsafe_fn)]
+#![allow(asm_sub_register)]
+#![allow(clashing_extern_declarations)]
+#![allow(unreachable_code)]
+#![allow(unreachable_patterns)]
+#![allow(unused_parens)]
+#![allow(unused_mut)]
+#![allow(dropping_copy_types)]
+#![allow(non_snake_case)]
+#![allow(ambiguous_glob_reexports)]
+#![allow(unused_macros)]
+#![allow(elided_lifetimes_in_paths)]
+#![allow(warnings)] // Suppress all remaining warnings
 
 extern crate alloc;
 

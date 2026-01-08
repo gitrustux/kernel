@@ -8,7 +8,6 @@
 //!
 //! Tests for formatted output functionality.
 
-#![no_std]
 
 use crate::kernel::tests::runner::*;
 

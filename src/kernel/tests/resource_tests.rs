@@ -8,7 +8,6 @@
 //!
 //! Tests for resource allocation and management.
 
-#![no_std]
 
 use crate::kernel::tests::runner::*;
 use crate::kernel::vm;

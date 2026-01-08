@@ -31,7 +31,6 @@
 //! let port = cmdline_get_uint32("kernel.serial.port", 0x3f8);
 //! ```
 
-#![no_std]
 
 use crate::kernel::sync::spin::SpinMutex as Mutex;
 

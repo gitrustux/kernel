@@ -30,7 +30,6 @@
 //! }
 //! ```
 
-#![no_std]
 
 use crate::debug;
 use alloc::collections::BTreeMap;

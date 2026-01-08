@@ -23,7 +23,6 @@
 //! implements the common `PageTableEntry` trait. The high-level `PageTable` type
 //! provides architecture-agnostic operations.
 
-#![no_std]
 
 use crate::kernel::vm::layout::*;
 use crate::kernel::vm::{ArchPageTable, VmError, Result};
@@ -315,7 +314,7 @@ impl PageTable {
         // Enforce W^X
         let flags_bits = flags.enforce_wxorx();
 
-        self.inner.map(vaddr, paddr, PageTableFlags::from_bits(flags_bits))
+        self.inner.map(vaddr, paddr, flags_bits)
     }
 
     /// Map multiple pages
@@ -337,7 +336,7 @@ impl PageTable {
         for i in 0..count {
             let va = vaddr + (i * PAGE_SIZE);
             let pa = paddr + (i * PAGE_SIZE);
-            self.inner.map(va, pa, PageTableFlags::from_bits(flags_bits))?;
+            self.inner.map(va, pa, flags_bits)?;
         }
 
         Ok(())
@@ -380,7 +379,7 @@ impl PageTable {
         // Enforce W^X
         let flags_bits = flags.enforce_wxorx();
 
-        self.inner.protect(vaddr, PageTableFlags::from_bits(flags_bits))
+        self.inner.protect(vaddr, flags_bits)
     }
 
     /// Update protection flags for multiple pages
@@ -399,19 +398,19 @@ impl PageTable {
 
         for i in 0..count {
             let va = vaddr + (i * PAGE_SIZE);
-            self.inner.protect(va, PageTableFlags::from_bits(flags_bits))?;
+            self.inner.protect(va, flags_bits)?;
         }
 
         Ok(())
     }
 
     /// Flush TLB entries for this page table
-    pub fn flush_tlb(&self) {
+    pub fn flush_tlb(&mut self) {
         self.inner.flush_tlb(None);
     }
 
     /// Flush TLB for a specific virtual address
-    pub fn flush_tlb_va(&self, vaddr: VAddr) {
+    pub fn flush_tlb_va(&mut self, vaddr: VAddr) {
         self.inner.flush_tlb(Some(vaddr));
     }
 

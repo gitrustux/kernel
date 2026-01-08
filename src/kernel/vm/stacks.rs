@@ -31,7 +31,6 @@
 //! +------------------+
 //! ```
 
-#![no_std]
 
 use crate::kernel::vm::layout::*;
 use crate::kernel::vm::aspace::*;

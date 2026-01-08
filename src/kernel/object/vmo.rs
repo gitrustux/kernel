@@ -24,7 +24,6 @@
 //! vmo.read(0, &mut buf)?;
 //! ```
 
-#![no_std]
 
 use crate::kernel::pmm;
 use crate::kernel::sync::Mutex;

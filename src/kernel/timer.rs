@@ -28,7 +28,6 @@
 //! timer.cancel();
 //! ```
 
-#![no_std]
 
 use crate::kernel::thread::ThreadId;
 use crate::rustux::types::*;

@@ -6,7 +6,6 @@
 
 //! Alignment utilities
 
-#![no_std]
 
 use core::fmt;
 

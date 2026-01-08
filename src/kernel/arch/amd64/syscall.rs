@@ -11,7 +11,6 @@
 //! The main syscall entry point is in syscall.S for performance
 //! and precise stack/register management.
 
-#![no_std]
 
 use crate::kernel::arch::amd64::debugger;
 use crate::kernel::arch::amd64::debugger::X86SyscallGeneralRegs;

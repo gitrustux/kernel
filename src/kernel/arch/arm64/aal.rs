@@ -9,7 +9,6 @@
 //! This module implements the AAL traits for ARM64, providing
 //! the architecture-specific implementations of the common interfaces.
 
-#![no_std]
 
 use crate::kernel::arch::arch_traits::*;
 use crate::arch::arm64;

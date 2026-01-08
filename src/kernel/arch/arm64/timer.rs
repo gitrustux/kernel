@@ -9,7 +9,6 @@
 //! This module provides functions for accessing the ARMv8 Generic Timer,
 //! which provides a system counter and per-CPU timers.
 
-#![no_std]
 
 use crate::arch::arm64;
 

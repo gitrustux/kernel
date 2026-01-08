@@ -8,7 +8,6 @@
 //!
 //! Multi-threaded Fibonacci computation test.
 
-#![no_std]
 
 use crate::kernel::tests::runner::*;
 use crate::kernel::thread;

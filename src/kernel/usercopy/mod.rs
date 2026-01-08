@@ -29,7 +29,6 @@
 //! - Page fault handlers are installed
 //! - The current thread's user context is valid
 
-#![no_std]
 
 use crate::kernel::vm::layout::{VAddr, PAddr, PAGE_SIZE, PAGE_SIZE_SHIFT, is_user_vaddr};
 use crate::kernel::vm::{Result, VmError};

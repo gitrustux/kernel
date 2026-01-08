@@ -25,7 +25,6 @@
 //! - [`event`] - Event objects
 //! - [`timer`] - Timer objects
 
-#![no_std]
 
 pub mod handle;
 pub mod vmo;

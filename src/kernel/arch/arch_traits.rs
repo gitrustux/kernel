@@ -12,7 +12,6 @@
 //! The AAL enables the kernel core to be architecture-agnostic while
 //! allowing architecture-specific optimizations where needed.
 
-#![no_std]
 
 use crate::rustux::types::*;
 

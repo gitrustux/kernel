@@ -9,7 +9,6 @@
 
 //! x86 architecture-specific initialization and core functions
 
-#![no_std]
 
 use core::sync::atomic::{AtomicI32, Ordering};
 use core::ptr;

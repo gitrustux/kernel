@@ -29,7 +29,6 @@
 //! vm_audit(aspace);
 //! ```
 
-#![no_std]
 
 use crate::kernel::vm::layout::*;
 use crate::kernel::vm::page_table::*;
@@ -200,7 +199,7 @@ fn dump_kernel_regions() {
             arm64::KERNEL_PERCPU_BASE);
         log_info!("  PHYSMAP: {:#x} - {:#x}",
             arm64::KERNEL_PHYSMAP_BASE,
-            arm64::KERNEL_PHYSMAP_BASE + arm64::KERNEL_PHYSMAP_SIZE);
+            0xffff_ffff_ffff_f000u64); // Upper bound of PHYSMAP region
     }
 
     #[cfg(target_arch = "x86_64")]

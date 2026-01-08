@@ -47,7 +47,6 @@
 //! tests::list();
 //! ```
 
-#![no_std]
 
 pub mod runner;
 pub mod conformance;

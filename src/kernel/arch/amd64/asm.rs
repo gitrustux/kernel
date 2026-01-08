@@ -10,7 +10,6 @@
 //! This module provides functions that require inline assembly
 //! for context switching, spinlocks, and other low-level operations.
 
-#![no_std]
 #![feature(asm_const)]
 #![feature(naked_functions)]
 

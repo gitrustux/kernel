@@ -25,7 +25,6 @@
 //! - Memory trapping
 //! - State save/restore
 
-#![no_std]
 
 use crate::kernel::object::{Handle, HandleTable, KernelObjectBase, ObjectType, Rights};
 use crate::kernel::usercopy::{copy_from_user, copy_to_user, UserPtr};

@@ -20,7 +20,6 @@
 //! - **Priority tests**: Thread priority changes
 //! - **TLS tests**: Thread-local storage
 
-#![no_std]
 
 use crate::kernel::tests::runner::*;
 use crate::kernel::thread;

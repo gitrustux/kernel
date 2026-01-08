@@ -54,6 +54,7 @@ impl Arm64Percpu {
 }
 
 #[repr(u32)]
+#[derive(Debug)]
 pub enum MpIpiTarget {
     MpIpiTargetAll = 0,
     MpIpiTargetAllButLocal = 1,
@@ -61,6 +62,7 @@ pub enum MpIpiTarget {
 }
 
 #[repr(u32)]
+#[derive(Debug)]
 pub enum MpIpi {
     MpIpiReschedule = 0,
     // Add other IPI types as needed
@@ -97,8 +99,8 @@ pub fn arch_init_cpu_map(cluster_count: u32, cluster_cpus: &[u32]) {
     unsafe {
         ARM_NUM_CPUS = cpu_id;
     }
-    
-    smp_mb();
+
+    unsafe { smp_mb(); }
 }
 
 // do the 'slow' lookup by mpidr to cpu number
@@ -132,12 +134,12 @@ pub fn arch_mp_send_ipi(target: MpIpiTarget, mut mask: cpu_mask_t, ipi: MpIpi) -
         },
         MpIpiTarget::MpIpiTargetAllButLocal => {
             mask = (1 << SMP_MAX_CPUS) - 1;
-            mask &= !cpu_num_to_mask(arch_curr_cpu_num());
+            mask &= !unsafe { cpu_num_to_mask(arch_curr_cpu_num()) };
         },
         MpIpiTarget::MpIpiTargetMask => {},
     }
 
-    interrupt_send_ipi(mask, ipi as u32)
+    unsafe { interrupt_send_ipi(mask, ipi as u32) }
 }
 
 pub fn arm64_init_percpu_early() {
@@ -150,13 +152,13 @@ pub fn arm64_init_percpu_early() {
 }
 
 pub fn arch_mp_init_percpu() {
-    interrupt_init_percpu();
+    unsafe { interrupt_init_percpu(); }
 }
 
 pub fn arch_flush_state_and_halt(flush_done: &Event) {
-    debug_assert!(arch_ints_disabled());
-    event_signal(flush_done, false);
-    platform_halt_cpu();
+    debug_assert!(unsafe { arch_ints_disabled() });
+    unsafe { event_signal(flush_done, false); }
+    unsafe { platform_halt_cpu(); }
     panic!("control should never reach here\n");
 }
 
@@ -208,7 +210,7 @@ pub fn arm64_prepare_cpu_idle(_idle: bool) {
 }
 
 /// Reschedule CPUs
-pub fn arm64_mp_reschedule(_cpu_mask: u32) {
+pub fn arm64_mp_reschedule(_cpu_mask: u64) {
     // TODO: Implement reschedule IPI
 }
 

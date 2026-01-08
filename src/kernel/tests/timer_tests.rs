@@ -14,7 +14,6 @@
 //!
 //! Converted from C++ timer_tests.cpp
 
-#![no_std]
 
 use crate::kernel::tests::runner::*;
 use crate::kernel::timer;

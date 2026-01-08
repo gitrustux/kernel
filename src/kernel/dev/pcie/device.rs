@@ -9,7 +9,6 @@
 //! This module defines structures for representing PCI devices
 //! and functions for device management.
 
-#![no_std]
 
 use crate::kernel::dev::pcie::config::PcieAddr;
 use crate::kernel::dev::pcie::constants::*;

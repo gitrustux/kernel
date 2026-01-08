@@ -31,7 +31,6 @@
 //! Failure: return negative error code
 //! ```
 
-#![no_std]
 
 use crate::rustux::types::*;
 use crate::rustux::types::err::*;

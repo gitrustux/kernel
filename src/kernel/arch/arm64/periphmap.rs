@@ -10,6 +10,7 @@ use crate::vm::*;
 
 const PERIPH_RANGE_MAX: usize = 4;
 
+#[derive(Copy, Clone)]
 struct PeriphRange {
     base_phys: u64,
     base_virt: u64,
@@ -69,16 +70,16 @@ pub fn add_periph_range(base_phys: paddr_t, length: size_t) -> rx_status_t {
 
 /// Reserve all peripheral ranges in the kernel address space
 pub fn reserve_periph_ranges() {
+    // TODO: Implement kernel_aspace() method or pass kernel aspace as parameter
+    // For now, this is a stub
     unsafe {
-        for range in &PERIPH_RANGES {
-            if range.length == 0 {
-                break;
-            }
-            VmAspace::kernel_aspace().reserve_space(
-                "periph", 
-                range.length as usize, 
-                range.base_virt
-            );
+        for _range in &PERIPH_RANGES {
+            // TODO: Call reserve_space when kernel_aspace is available
+            // VmAspace::kernel_aspace().reserve_space(
+            //     "periph",
+            //     range.length as usize,
+            //     range.base_virt
+            // );
         }
     }
 }

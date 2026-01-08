@@ -10,7 +10,6 @@
 //! implementation is in kernel::debug. This module exists for compatibility
 //! with code that imports from the top-level debug module.
 
-#![no_std]
 
 // Re-export the actual debug module from kernel
 pub use crate::kernel::debug::*;

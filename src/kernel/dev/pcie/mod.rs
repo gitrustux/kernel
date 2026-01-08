@@ -31,7 +31,6 @@
 //! qemu-system-riscv64 -M virt -device virtio-net-pci
 //! ```
 
-#![no_std]
 
 pub mod constants;
 pub mod config;

@@ -6,7 +6,6 @@
 
 //! Public API includes for AMD64
 
-#![no_std]
 
 // Re-export arch module
 pub mod arch;

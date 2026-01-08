@@ -8,7 +8,6 @@
 //!
 //! This module provides hypervisor/virtualization support for the Rustux kernel.
 
-#![no_std]
 
 use alloc::collections::BTreeMap;
 use alloc::sync::Arc;

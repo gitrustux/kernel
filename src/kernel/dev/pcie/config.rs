@@ -9,7 +9,6 @@
 //! This module provides functions for reading and writing PCI configuration space
 //! using ECAM (Enhanced Configuration Access Mechanism).
 
-#![no_std]
 
 use crate::kernel::dev::pcie::constants::*;
 use crate::kernel::arch::arch_traits::ArchMMU;

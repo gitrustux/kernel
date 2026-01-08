@@ -24,7 +24,6 @@
 //! - Support for ownership tracking
 //! - Requeue operations for complex synchronization
 
-#![no_std]
 
 use crate::kernel::sync::wait_queue::WaitQueue;
 use crate::kernel::sync::Mutex;

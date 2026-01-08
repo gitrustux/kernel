@@ -8,7 +8,6 @@
 //!
 //! Minimal stub for address space management.
 
-#![no_std]
 
 /// Address space structure
 pub struct AddressSpace {

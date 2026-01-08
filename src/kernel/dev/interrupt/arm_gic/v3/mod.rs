@@ -9,7 +9,6 @@
 //! This is a placeholder module. The actual GICv3 implementation
 //! is in C++ (arm_gicv3.cpp). This Rust module provides FFI bindings.
 
-#![no_std]
 
 // Re-export C++ functions through FFI
 extern "C" {

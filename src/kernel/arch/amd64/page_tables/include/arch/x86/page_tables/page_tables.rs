@@ -4,7 +4,6 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT
 
-#![no_std]
 
 use core::sync::atomic::{AtomicUsize, Ordering};
 use core::ptr::{null_mut};

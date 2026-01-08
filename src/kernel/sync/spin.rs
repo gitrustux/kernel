@@ -9,7 +9,6 @@
 //! This module provides a simple spinlock for kernel use.
 //! Spinlocks are used when the expected wait time is very short.
 
-#![no_std]
 
 use core::sync::atomic::{AtomicBool, Ordering};
 use core::cell::UnsafeCell;

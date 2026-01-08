@@ -1,7 +1,6 @@
 // Rustux Authors 2025
 //! This file contains various x86 MMU-related constants and macros in Rustux.
 
-#![no_std]
 
 const X86_MMU_PG_P: u64 = 0x0001;   // P Valid
 const X86_MMU_PG_RW: u64 = 0x0002;  // R/W Read/Write

@@ -26,7 +26,6 @@
 //! cpu_data.current_thread = some_tid;
 //! ```
 
-#![no_std]
 
 use crate::kernel::thread::ThreadId;
 use core::sync::atomic::{AtomicU64, AtomicU8, Ordering};

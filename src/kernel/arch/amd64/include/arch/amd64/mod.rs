@@ -8,7 +8,6 @@
 //!
 //! This module re-exports all the AMD64-specific modules.
 
-#![no_std]
 
 use core::ptr;
 use core::sync::atomic::{AtomicUsize, Ordering};

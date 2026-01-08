@@ -9,7 +9,6 @@
 //!
 //! This module provides cache manipulation functions for x86 processors.
 
-#![no_std]
 
 use crate::kernel::arch::amd64::feature;
 use crate::rustux::types::*;
