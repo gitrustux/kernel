@@ -1,5 +1,5 @@
 [package]
-name = "rustix"
+name = "rustux"
 version = "0.1.0"
 edition = "2021"
 authors = ["Antonio Castillo <lacrimatus@gmail.com>"]
