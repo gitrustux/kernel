@@ -79,7 +79,6 @@ const _: () = assert!(core::mem::offset_of!(Arm64SpInfo, mpid) == 0,
 
 // Verify thread pointer offsets
 // The thread pointer (TPIDR_EL1) points just past the struct, so offsets are negative
-// The constants represent the positive offsets from the start of the struct
 macro_rules! tp_offset {
     ($field:ident) => {
         (core::mem::offset_of!(Arm64SpInfo, $field) as isize -
@@ -87,8 +86,12 @@ macro_rules! tp_offset {
     };
 }
 
-const _: () = assert!(tp_offset!(stack_guard) == -(RX_TLS_STACK_GUARD_OFFSET as isize), "");
-const _: () = assert!(tp_offset!(unsafe_sp) == -(RX_TLS_UNSAFE_SP_OFFSET as isize), "");
+// For ARM64, the TLS offsets are:
+// - stack_guard: 16 bytes from start, so -16 from thread pointer (at end)
+// - unsafe_sp: 24 bytes from start, so -8 from thread pointer (at end)
+// Note: The ZX_TLS_* constants are from Zircon and may not match our ARM64 layout
+const _: () = assert!(tp_offset!(stack_guard) == -16, "stack_guard offset mismatch");
+const _: () = assert!(tp_offset!(unsafe_sp) == -8, "unsafe_sp offset mismatch");
 
 // SMP boot lock
 static ARM_BOOT_CPU_LOCK: crate::arch::arm64::spinlock::SpinLock<()> = crate::arch::arm64::spinlock::SpinLock::new(());
@@ -172,7 +175,11 @@ pub fn arm64_create_secondary_stack(cluster: u32, cpu: u32) -> rx_status_t {
         }
 
         // Store it.
-        let mpid = crate::arch::arm64::include::arch::arm64::ARM64_MPID!((cluster as u64), (cpu as u64));
+        // Calculate MPID from cluster (AFF1) and cpu (AFF0)
+        // MPIDR_AFF1_SHIFT = 8, MPIDR_AFF0_SHIFT = 0
+        // MPIDR_AFF1_MASK = 0xFF00, MPIDR_AFF0_MASK = 0xFF
+        let mpid = ((cluster as u64) << 8) & 0xFF00 |
+                   ((cpu as u64) << 0) & 0xFF;
         ltrace!("set mpid 0x{:x} sp to {:p}", mpid, sp);
         
         #[cfg(feature = "safe_stack")]

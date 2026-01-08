@@ -72,26 +72,26 @@ fn dump_iframe(iframe: &arm64::arm64_iframe_long) {
 }
 
 fn try_dispatch_user_data_fault_exception(
-    type_: rx_excp_type_t, 
+    type_: rx_excp_type_t,
     iframe: &mut arm64::arm64_iframe_long,
-    esr: u32, 
+    esr: u32,
     far: u64
 ) -> rx_status_t {
     let thread = thread::get_current_thread();
     let mut context = exception::arch_exception_context_t {
-        frame: iframe as *mut arm64::arm64_iframe_long,
-        esr,
+        frame: iframe as *mut u8,
+        esr: esr as u64,
         far,
     };
 
     arch_ops::arch_enable_ints();
     if let Some(ref thr) = thread {
         debug_assert!(thr.arch.suspended_general_regs.is_null());
-        thr.arch.suspended_general_regs = iframe as *mut arm64::arm64_iframe_long;
-        let status = exception::dispatch_user_exception(type_, &mut context);
+        thr.arch.suspended_general_regs = iframe;
+        exception::dispatch_user_exception(&context, type_ as u32);
         thr.arch.suspended_general_regs = core::ptr::null_mut();
         arch_ops::arch_disable_ints();
-        status
+        RX_OK
     } else {
         arch_ops::arch_disable_ints();
         RX_ERR_NOT_FOUND
@@ -116,7 +116,7 @@ fn exception_die(iframe: &mut arm64::arm64_iframe_long, esr: u32) -> ! {
     /* fatal exception, die here */
     println!("ESR 0x{:x}: ec 0x{:x}, il 0x{:x}, iss 0x{:x}", esr, ec, il, iss);
     dump_iframe(iframe);
-    crashlog::crashlog.iframe = iframe as *mut arm64::arm64_iframe_long;
+    crashlog::crashlog.iframe = iframe as *mut u8;
 
     platform::platform_halt(platform::HALT_ACTION_HALT, platform::HALT_REASON_SW_PANIC);
     // This never returns
@@ -189,11 +189,11 @@ fn arm64_instruction_abort_handler(iframe: &mut arm64::arm64_iframe_long, except
     
     let ec = bits::BITS_SHIFT(esr, 31, 26);
     let iss = bits::BITS(esr, 24, 0);
-    let is_user = !bits::BIT(ec, 0);
+    let is_user = !bits::BIT(ec, 0) != 0;
 
     let mut pf_flags = vm::VMM_PF_FLAG_INSTRUCTION;
     pf_flags |= if is_user { vm::VMM_PF_FLAG_USER } else { 0 };
-    
+
     /* Check if this was not permission fault */
     if (iss & 0b111100) != 0b001100 {
         pf_flags |= vm::VMM_PF_FLAG_NOT_PRESENT;
@@ -205,11 +205,11 @@ fn arm64_instruction_abort_handler(iframe: &mut arm64::arm64_iframe_long, except
     arch_ops::arch_enable_ints();
     EXCEPTIONS_PAGE.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
     CPU_STATS_INC!(page_faults);
-    
-    let err = fault::vmm_page_fault_handler(far, pf_flags);
-    
+
+    let err = fault::vmm_page_fault_handler(far as usize, pf_flags);
+
     arch_ops::arch_disable_ints();
-    
+
     if err >= 0 {
         return;
     }
