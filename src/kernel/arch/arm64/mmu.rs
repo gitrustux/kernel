@@ -34,6 +34,7 @@ use crate::vm::physmap::*;
 use crate::vm::pmm::*;
 use crate::vm::vm::*;
 use crate::vm::{vaddr_to_paddr, phys_to_virt, is_user_address};
+use crate::vm::page_table::PageTableFlags;
 // Import stub types from hypervisor module
 use crate::arch::arm64::include::arch::hypervisor::{RawBitmapGeneric, FixedStorage};
 
@@ -86,9 +87,8 @@ impl ArmArchVmAspace {
 
         // XXX make sure it's not mapped
 
-        let page = paddr_to_vm_page(self.tt_phys);
-        debug_assert!(!page.is_null());
-        pmm_free_page(page);
+        // pmm_free_page expects a physical address, not a page pointer
+        pmm_free_page(self.tt_phys);
 
         if self.flags & ARCH_ASPACE_FLAG_GUEST != 0 {
             let vttbr = arm64_vttbr(self.asid, self.tt_phys);
@@ -820,7 +820,10 @@ impl ArmArchVmAspace {
         // currently we only support allocating a single page
         debug_assert!(page_size_shift == PAGE_SIZE_SHIFT);
 
-        let (page, paddr) = pmm_alloc_page(0);
+        let (page, paddr) = match pmm_alloc_page(0) {
+            Ok((page, paddr)) => (page, paddr),
+            Err(_) => return RX_ERR_NO_MEMORY,
+        };
         if page.is_null() {
             return RX_ERR_NO_MEMORY;
         }
@@ -843,7 +846,8 @@ impl ArmArchVmAspace {
         debug_assert!(page_size_shift == PAGE_SIZE_SHIFT);
 
         // TODO: Implement proper VM page management
-        let _page = paddr_to_vm_page(paddr);
+        // Use fully qualified path to avoid ambiguity
+        let _page = crate::vm::physmap::paddr_to_vm_page(paddr);
         // local_ktrace0!("page table free"); // TODO: Fix trace tag type
 
         // pmm_free_page(_page as *mut u8); // TODO: Implement when VM page management is ready
@@ -1518,7 +1522,10 @@ impl ArmArchVmAspace {
             self.size = size;
 
             let mut pa: paddr_t = 0;
-            let (page, paddr) = pmm_alloc_page(0);
+            let (page, paddr) = match pmm_alloc_page(0) {
+                Ok((page, paddr)) => (page, paddr),
+                Err(_) => return RX_ERR_NO_MEMORY,
+            };
             if page.is_null() {
                 return RX_ERR_NO_MEMORY;
             }
@@ -1526,7 +1533,8 @@ impl ArmArchVmAspace {
             // TODO: Set page state when VM page management is implemented
             // unsafe { (*page).state = VM_PAGE_STATE_MMU; }
 
-            let va = paddr_to_physmap(pa) as *mut pte_t;
+            // Use phys_to_virt to convert physical address to virtual
+            let va = crate::vm::phys_to_virt(pa) as *mut pte_t;
 
             self.tt_virt = va;
             self.tt_phys = pa;
@@ -1667,8 +1675,10 @@ impl ArmPageTable {
     }
 
     /// Map a page in the page table
-    pub fn map(&mut self, vaddr: usize, paddr: usize, flags: u64) -> VmResult<()> {
-        // TODO: Implement map
+    pub fn map(&mut self, vaddr: usize, paddr: usize, flags: PageTableFlags) -> VmResult<()> {
+        // Convert PageTableFlags to u64 for internal use
+        let flags_bits = flags.bits();
+        // TODO: Implement map using flags_bits
         Ok(())
     }
 
@@ -1679,8 +1689,10 @@ impl ArmPageTable {
     }
 
     /// Change protection flags for a page
-    pub fn protect(&mut self, vaddr: usize, flags: u64) -> VmResult<()> {
-        // TODO: Implement protect
+    pub fn protect(&mut self, vaddr: usize, flags: PageTableFlags) -> VmResult<()> {
+        // Convert PageTableFlags to u64 for internal use
+        let flags_bits = flags.bits();
+        // TODO: Implement protect using flags_bits
         Ok(())
     }
 
@@ -1715,6 +1727,52 @@ impl ArmPageTable {
     /// Get pointer to entries
     pub fn as_ptr(&mut self) -> *mut pte_t {
         self.entries.as_mut_ptr()
+    }
+}
+
+/// Implement ArchPageTable trait for ArmPageTable
+impl crate::vm::ArchPageTable for ArmPageTable {
+    type Entry = crate::vm::page_table::GenericEntry;
+
+    fn new() -> crate::vm::Result<Self> {
+        Ok(Self::new())
+    }
+
+    fn map(&mut self, vaddr: crate::vm::VAddr, paddr: crate::vm::PAddr, flags: crate::vm::page_table::PageTableFlags) -> crate::vm::Result {
+        self.map(vaddr, paddr, flags)
+    }
+
+    fn unmap(&mut self, vaddr: crate::vm::VAddr) -> crate::vm::Result {
+        self.unmap(vaddr)
+    }
+
+    fn resolve(&self, vaddr: crate::vm::VAddr) -> Option<crate::vm::PAddr> {
+        self.resolve(vaddr)
+    }
+
+    fn protect(&mut self, vaddr: crate::vm::VAddr, flags: crate::vm::page_table::PageTableFlags) -> crate::vm::Result {
+        self.protect(vaddr, flags)
+    }
+
+    fn flush_tlb(&self, vaddr: Option<crate::vm::VAddr>) {
+        // Create a mutable self reference for the flush
+        // This is a bit awkward because flush_tlb takes &mut self but trait takes &self
+        // For now, we'll just call the TLBI instructions inline here
+        unsafe {
+            if let Some(a) = vaddr {
+                // Flush specific address
+                core::arch::asm!("tlbi vaae1is, {}", in(reg) (a >> 12));
+            } else {
+                // Flush all
+                core::arch::asm!("tlbi vmalle1is");
+            }
+            core::arch::asm!("dsb ish");
+            core::arch::asm!("isb");
+        }
+    }
+
+    fn root_phys(&self) -> crate::vm::PAddr {
+        self.root_phys()
     }
 }
 
