@@ -325,13 +325,15 @@ impl ArchUserAccess for Arm64Arch {
 // ============= ArchUserEntry Implementation =============
 
 impl ArchUserEntry for Arm64Arch {
-    unsafe fn enter_userspace(arg1: usize, arg2: usize, sp: usize, pc: usize, flags: u64) -> ! {
+    unsafe fn enter_userspace(arg1: usize, arg2: usize, sp: usize, pc: usize, _flags: u64) -> ! {
         // ARM64 uses eret to return to user space
-        arm64::arch_enter_uspace(arg1, arg2, sp, pc, flags)
+        // Note: arch_enter_uspace signature is (pc, sp, arg1, arg2)
+        arm64::arch_enter_uspace(pc as u64, sp as u64, arg1 as u64, arg2 as u64)
     }
 
-    unsafe fn return_to_userspace(iframe: *mut ()) -> ! {
-        arm64::arch_uspace_exception_return(iframe)
+    unsafe fn return_to_userspace(_iframe: *mut ()) -> ! {
+        // ARM64 arch_uspace_exception_return takes no arguments
+        arm64::arch_uspace_exception_return()
     }
 }
 

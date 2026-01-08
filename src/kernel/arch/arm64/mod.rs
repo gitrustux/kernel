@@ -67,7 +67,11 @@ pub use include::arch::arm64::{
     ARM64_EXCEPTION_FLAG_ARM32,
     iframe_t,
     iframe,
+    RiscvIframe,  // Re-export for cross-arch compatibility
 };
+
+// Import commonly used types
+use crate::rustux::types::VAddr;
 
 // Re-export commonly used types from mmu module
 pub use mmu::pte_t;
@@ -211,17 +215,6 @@ impl Default for arm64_percpu {
 }
 
 // ============================================================================
-// RISC-V Compatibility Stub (for cross-arch code)
-// ============================================================================
-
-/// RISC-V interrupt frame (stub for cross-arch compatibility)
-#[repr(C)]
-#[derive(Debug, Clone, Copy)]
-pub struct RiscvIframe {
-    pub data: [u64; 32],
-}
-
-// ============================================================================
 // Debug State Type
 // ============================================================================
 
@@ -338,8 +331,17 @@ pub fn arch_uspace_exception_return() -> ! {
     }
 }
 
-/// User space entry point
-pub fn arm64_uspace_entry(_arg: u64) -> ! {
+/// User space entry point (stub - real implementation is in assembly)
+/// This matches the signature of the C function declared in include/arch/arm64.rs
+pub fn arm64_uspace_entry(
+    _arg1: usize,
+    _arg2: usize,
+    _pc: usize,
+    _sp: usize,
+    _kstack: VAddr,
+    _spsr: u32,
+    _mdscr: u32,
+) -> ! {
     loop {
         core::hint::spin_loop();
     }
