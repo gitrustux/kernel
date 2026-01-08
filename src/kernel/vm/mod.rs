@@ -38,6 +38,7 @@ pub mod walker;
 pub mod pmm;
 pub mod physmap;
 pub mod vm_object;
+pub mod init;
 
 // Re-exports for convenience
 pub use layout::{
