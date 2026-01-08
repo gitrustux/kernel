@@ -257,7 +257,7 @@ pub struct ArchThread {
 }
 
 // Constants
-const ARM64_MAX_HW_BREAKPOINTS: usize = 16;
+pub const ARM64_MAX_HW_BREAKPOINTS: usize = 16;
 const ARM64_DBGBCR_PMC_SHIFT: u32 = 1; // Position in register
 const ARM64_DBGBCR_BAS: u32 = 0xFF; // Byte Address Select mask
 const ARM_MB_SY: u32 = 15; // Full system memory barrier
