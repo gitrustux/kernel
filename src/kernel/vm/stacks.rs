@@ -308,7 +308,8 @@ pub unsafe fn init_stacks() {
 
     #[cfg(target_arch = "riscv64")]
     let (base, size) = {
-        let stacks_base = riscv::KERNEL_HEAP_BASE + riscv::KERNEL_HEAP_SIZE;
+        let stacks_base = riscv::KERNEL_HEAP_BASE.checked_add(riscv::KERNEL_HEAP_SIZE)
+            .expect("RISC-V kernel heap layout would overflow");
         let stacks_size = 256 * KERNEL_STACK_SIZE;
         (stacks_base, stacks_size)
     };

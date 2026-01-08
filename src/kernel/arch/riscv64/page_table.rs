@@ -37,7 +37,9 @@
 
 use crate::kernel::pmm;
 use crate::rustux::types::*;
+use crate::rustux::types::err::*;
 use crate::kernel::sync::spin::SpinMutex;
+use crate::kernel::vm::{ArchPageTable, PageTableEntry as VmPageTableEntry, PageTableFlags, VmError, Result as VmResult};
 
 /// ============================================================================
 /// Constants
@@ -244,7 +246,7 @@ pub struct PageTable {
     pub vaddr: VAddr,
 
     /// Entries in this page table
-    pub entries: Mutex<[PageTableEntry; ENTRIES_PER_PAGE_TABLE]>,
+    pub entries: SpinMutex<[PageTableEntry; ENTRIES_PER_PAGE_TABLE]>,
 }
 
 impl PageTable {
@@ -262,8 +264,18 @@ impl PageTable {
         Ok(Self {
             paddr,
             vaddr,
-            entries: unsafe { Mutex::new(core::ptr::read_volatile(vaddr as *const _)) },
+            entries: unsafe { SpinMutex::new(core::ptr::read_volatile(vaddr as *const _)) },
         })
+    }
+
+    /// Create a new page table (alias for alloc)
+    pub fn new() -> Result<Self> {
+        Self::alloc()
+    }
+
+    /// Create a new kernel page table
+    pub fn new_kernel() -> Result<Self> {
+        Self::alloc()
     }
 
     /// Get entry at index
@@ -312,6 +324,134 @@ impl PageTable {
         unsafe {
             core::arch::asm!("sfence.vma");
         }
+    }
+
+    /// Map a page (wrapper for compatibility with vm::page_table API)
+    pub fn map_wrapper(&mut self, _vaddr: VAddr, _paddr: PAddr, _flags: PageTableFlags) -> VmResult<()> {
+        // TODO: Implement page table mapping
+        // This would need to walk the page table hierarchy and create entries
+        // For now, return an error to indicate unimplemented
+        Err(VmError::NoMemory)
+    }
+
+    /// Unmap a page (wrapper for compatibility with vm::page_table API)
+    pub fn unmap_wrapper(&mut self, _vaddr: VAddr) -> VmResult<()> {
+        // TODO: Implement page table unmapping
+        // For now, return an error to indicate unimplemented
+        Err(VmError::NotMapped)
+    }
+
+    /// Resolve a virtual address to physical address
+    pub fn resolve_wrapper(&self, _vaddr: VAddr) -> Option<PAddr> {
+        // TODO: Implement address translation
+        // For now, return None
+        None
+    }
+
+    /// Update protection flags for a mapping (wrapper for compatibility)
+    pub fn protect_wrapper(&mut self, _vaddr: VAddr, _flags: PageTableFlags) -> VmResult<()> {
+        // TODO: Implement protection update
+        // For now, return an error to indicate unimplemented
+        Err(VmError::BadState)
+    }
+
+    /// Flush TLB entries (wrapper for compatibility)
+    pub fn flush_tlb_wrapper(&mut self, _vaddr: Option<VAddr>) {
+        // RISC-V uses sfence.vma for TLB invalidation
+        unsafe {
+            core::arch::asm!("sfence.vma");
+        }
+    }
+
+    /// Get the physical address of the root page table
+    pub fn root_phys_wrapper(&self) -> PAddr {
+        self.paddr
+    }
+}
+
+/// Page table entry implementation for ArchPageTable trait
+impl VmPageTableEntry for PageTableEntry {
+    fn new() -> Self {
+        Self::new()
+    }
+
+    fn new_entry(paddr: usize, flags: PageTableFlags) -> Self {
+        // Convert PageTableFlags to the raw u64 bits
+        let flags_bits = flags.bits();
+        Self::new_page(paddr as u64, flags_bits)
+    }
+
+    fn paddr(&self) -> usize {
+        ((self.entry >> 10) << 12) as usize
+    }
+
+    fn flags(&self) -> PageTableFlags {
+        // Extract flag bits and reconstruct
+        let bits = self.entry & 0x3FF;
+        PageTableFlags::from_bits(bits)
+    }
+
+    fn is_present(&self) -> bool {
+        (self.entry & self::flags::VALID) != 0
+    }
+
+    fn is_block(&self) -> bool {
+        false
+    }
+
+    fn set_flags(&mut self, flags: PageTableFlags) {
+        // Preserve the physical address part
+        let paddr_part = self.entry & !0x3FF;
+        self.entry = paddr_part | (flags.bits() & 0x3FF);
+    }
+
+    fn as_bits(&self) -> u64 {
+        self.entry
+    }
+
+    fn from_bits(bits: u64) -> Self {
+        Self { entry: bits }
+    }
+}
+
+/// Implement ArchPageTable trait for PageTable
+impl ArchPageTable for PageTable {
+    type Entry = PageTableEntry;
+
+    fn new() -> VmResult<Self> {
+        Self::alloc().map_err(|e| match e {
+            -1 => VmError::NoMemory,
+            _ => VmError::BadState,
+        })
+    }
+
+    fn map(&mut self, vaddr: VAddr, paddr: usize, flags: PageTableFlags) -> VmResult<()> {
+        self.map_wrapper(vaddr, paddr as u64, flags)
+    }
+
+    fn unmap(&mut self, vaddr: VAddr) -> VmResult<()> {
+        self.unmap_wrapper(vaddr)
+    }
+
+    fn resolve(&self, vaddr: VAddr) -> Option<usize> {
+        self.resolve_wrapper(vaddr).map(|p| p as usize)
+    }
+
+    fn protect(&mut self, vaddr: VAddr, flags: PageTableFlags) -> VmResult<()> {
+        self.protect_wrapper(vaddr, flags)
+    }
+
+    fn flush_tlb(&self, vaddr: Option<VAddr>) {
+        // Create a mutable reference for the call
+        // This is safe since flush_tlb only modifies hardware state
+        unsafe {
+            let mut_ptr = self as *const Self as *mut Self;
+            (*mut_ptr).flush_tlb_wrapper(vaddr);
+        }
+    }
+
+    fn root_phys(&self) -> usize {
+        self.root_phys_wrapper() as usize
     }
 }
 
@@ -412,22 +552,22 @@ impl AddressSpace {
     /// * `alloc_tables` - Whether to allocate intermediate tables
     pub fn map_page(&mut self, vaddr: VAddr, paddr: PAddr, flags: u64, alloc_tables: bool) -> Result<()> {
         // Validate alignment
-        if vaddr & (PAGE_SIZE - 1) != 0 || paddr & (PAGE_SIZE - 1) != 0 {
+        if vaddr & (PAGE_SIZE - 1) != 0 || paddr & ((PAGE_SIZE - 1) as u64) != 0 {
             return Err(RX_ERR_INVALID_ARGS);
         }
 
+        let mode = self.mode;
         let root = self.root.as_mut().ok_or(RX_ERR_BAD_STATE)?;
 
         // Walk/create page tables
-        match self.mode {
-            AddressSpaceMode::Sv39 => self.map_page_sv39(root, vaddr, paddr, flags, alloc_tables),
-            AddressSpaceMode::Sv48 => self.map_page_sv48(root, vaddr, paddr, flags, alloc_tables),
+        match mode {
+            AddressSpaceMode::Sv39 => Self::map_page_sv39(root, vaddr, paddr, flags, alloc_tables),
+            AddressSpaceMode::Sv48 => Self::map_page_sv48(root, vaddr, paddr, flags, alloc_tables),
         }
     }
 
     /// Map a page in Sv39 mode
     fn map_page_sv39(
-        &mut self,
         root: &mut PageTable,
         vaddr: VAddr,
         paddr: PAddr,
@@ -452,7 +592,7 @@ impl AddressSpace {
             // Allocate new L1 table
             let l1_table = PageTable::alloc()?;
             root.set_entry(l2_idx, PageTableEntry::new_table(l1_table.ppn()));
-            l1_table.vaddr
+            l1_table.vaddr as u64 as u64
         };
 
         // Get or create L0 table
@@ -468,7 +608,7 @@ impl AddressSpace {
             // Allocate new L0 table
             let l0_table = PageTable::alloc()?;
             unsafe { &*(l1_vaddr as *const PageTable) }.set_entry(l1_idx, PageTableEntry::new_table(l0_table.ppn()));
-            l0_table.vaddr
+            l0_table.vaddr as u64
         };
 
         // Set page table entry
@@ -488,16 +628,17 @@ impl AddressSpace {
             return Err(RX_ERR_INVALID_ARGS);
         }
 
+        let mode = self.mode;
         let root = self.root.as_mut().ok_or(RX_ERR_BAD_STATE)?;
 
-        match self.mode {
-            AddressSpaceMode::Sv39 => self.unmap_page_sv39(root, vaddr),
-            AddressSpaceMode::Sv48 => self.unmap_page_sv48(root, vaddr),
+        match mode {
+            AddressSpaceMode::Sv39 => Self::unmap_page_sv39(root, vaddr),
+            AddressSpaceMode::Sv48 => Self::unmap_page_sv48(root, vaddr),
         }
     }
 
     /// Unmap a page in Sv39 mode
-    fn unmap_page_sv39(&mut self, root: &mut PageTable, vaddr: VAddr) -> Result<()> {
+    fn unmap_page_sv39(root: &mut PageTable, vaddr: VAddr) -> Result<()> {
         // Extract page table indices
         let l2_idx = (vaddr >> 30) & 0x1FF;
         let l1_idx = (vaddr >> 21) & 0x1FF;
@@ -567,7 +708,7 @@ impl AddressSpace {
         let page_paddr = final_entry.paddr();
         let offset = vaddr & (PAGE_SIZE - 1);
 
-        Some(page_paddr + offset)
+        Some(page_paddr + offset as u64)
     }
 
     // ============================================================================
@@ -578,7 +719,6 @@ impl AddressSpace {
     ///
     /// Sv48 has 4 levels: [47:39] L3, [38:30] L2, [29:21] L1, [20:12] L0, [11:0] offset
     fn map_page_sv48(
-        &mut self,
         root: &mut PageTable,
         vaddr: VAddr,
         paddr: PAddr,
@@ -604,7 +744,7 @@ impl AddressSpace {
             // Allocate new L2 table
             let l2_table = PageTable::alloc()?;
             root.set_entry(l3_idx, PageTableEntry::new_table(l2_table.ppn()));
-            l2_table.vaddr
+            l2_table.vaddr as u64
         };
 
         // Get or create L1 table
@@ -620,7 +760,7 @@ impl AddressSpace {
             // Allocate new L1 table
             let l1_table = PageTable::alloc()?;
             unsafe { &*(l2_vaddr as *const PageTable) }.set_entry(l2_idx, PageTableEntry::new_table(l1_table.ppn()));
-            l1_table.vaddr
+            l1_table.vaddr as u64
         };
 
         // Get or create L0 table
@@ -636,7 +776,7 @@ impl AddressSpace {
             // Allocate new L0 table
             let l0_table = PageTable::alloc()?;
             unsafe { &*(l1_vaddr as *const PageTable) }.set_entry(l1_idx, PageTableEntry::new_table(l0_table.ppn()));
-            l0_table.vaddr
+            l0_table.vaddr as u64
         };
 
         // Set page table entry
@@ -650,7 +790,7 @@ impl AddressSpace {
     }
 
     /// Unmap a page in Sv48 mode
-    fn unmap_page_sv48(&mut self, root: &mut PageTable, vaddr: VAddr) -> Result<()> {
+    fn unmap_page_sv48(root: &mut PageTable, vaddr: VAddr) -> Result<()> {
         // Extract page table indices
         let l3_idx = (vaddr >> 39) & 0x1FF;
         let l2_idx = (vaddr >> 30) & 0x1FF;
@@ -726,7 +866,7 @@ impl AddressSpace {
         let page_paddr = final_entry.paddr();
         let offset = vaddr & (PAGE_SIZE - 1);
 
-        Some(page_paddr + offset)
+        Some(page_paddr + offset as u64)
     }
 }
 
@@ -743,7 +883,7 @@ pub fn init_kernel_as() {
         KERNEL_AS = Some(AddressSpace::new(AddressSpaceMode::Sv39, 0).unwrap());
     }
 
-    log_info!("Kernel address space initialized");
+    println!("Kernel address space initialized");
 }
 
 /// Get kernel address space

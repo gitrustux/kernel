@@ -10,8 +10,8 @@
 //! for debugging purposes, including general-purpose registers.
 
 
-use crate::arch::riscv64::RiscvIframe;
-use crate::kernel::thread;
+use crate::arch::riscv64::exceptions_c::RiscvIframe;
+use crate::kernel::thread::{self, Thread};
 use crate::rustux::types::*;
 
 /// User-accessible flags in SSTATUS
@@ -20,6 +20,7 @@ const X86_FLAGS_USER: u64 = 0x3F7FF; // Note: This is named for x86 compatibilit
 /// Thread general register state (for userspace)
 #[repr(C)]
 pub struct RiscvThreadStateGeneralRegs {
+    pub zero: u64, // x0 (hardwired to 0)
     pub ra: u64,   // x1
     pub sp: u64,   // x2
     pub gp: u64,   // x3

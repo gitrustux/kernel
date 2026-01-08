@@ -6,7 +6,8 @@
 
 //! Architecture-agnostic spinlock interface
 
-use crate::arch::spinlock;
+use crate::arch::riscv64::spinlock;
+use crate::arch::riscv64::include::arch::arch_ops as arch_ops;
 
 /// Spinlock save state for IRQ-save operations
 #[repr(C)]
@@ -23,7 +24,7 @@ impl SpinLockSaveIrqSave {
 /// Acquire spinlock with interrupt state saved
 #[inline(always)]
 pub fn spin_lock_save(lock: &spinlock::SpinLock, state: &mut SpinLockSaveIrqSave) {
-    state.state = unsafe { crate::arch::ops::arch_disable_ints() };
+    state.state = unsafe { arch_ops::arch_disable_ints() };
     lock.acquire();
 }
 
@@ -31,5 +32,5 @@ pub fn spin_lock_save(lock: &spinlock::SpinLock, state: &mut SpinLockSaveIrqSave
 #[inline(always)]
 pub fn spin_unlock_restore(lock: &spinlock::SpinLock, state: &SpinLockSaveIrqSave) {
     lock.release();
-    unsafe { crate::arch::ops::arch_restore_ints(state.state) };
+    unsafe { arch_ops::arch_restore_ints(state.state) };
 }

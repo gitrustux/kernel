@@ -94,8 +94,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "rustix"
-version = "0.1.0"
+name = "rustux"
+version = "0.0.1"
 dependencies = [
  "aarch64-cpu",
  "bitflags",

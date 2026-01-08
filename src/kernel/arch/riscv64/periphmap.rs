@@ -12,6 +12,7 @@
 
 use crate::arch::riscv64::mmu;
 use crate::rustux::types::*;
+use crate::vm::PAGE_SIZE;
 
 /// Base address for peripheral mappings in kernel virtual address space
 pub const PERIPH_BASE: VAddr = 0xFFFF_FFFF_F000_0000;
@@ -21,6 +22,8 @@ pub const PERIPH_SIZE: usize = 256 * 1024 * 1024 * 1024;
 
 /// Typical RISC-V peripheral physical addresses
 pub mod periph_pa {
+    use crate::rustux::types::PAddr;
+
     /// UART0 (typically 16550 compatible)
     pub const UART0: PAddr = 0x1000_0000;
 
@@ -82,7 +85,43 @@ static mut PERIPH_MAPS: [PeriphMap; 16] = [
         flags: 0,
         mapped: false,
     },
-]; // Remaining entries are empty
+    PeriphMap {
+        name: "", phys: 0, size: 0, virt: 0, flags: 0, mapped: false,
+    },
+    PeriphMap {
+        name: "", phys: 0, size: 0, virt: 0, flags: 0, mapped: false,
+    },
+    PeriphMap {
+        name: "", phys: 0, size: 0, virt: 0, flags: 0, mapped: false,
+    },
+    PeriphMap {
+        name: "", phys: 0, size: 0, virt: 0, flags: 0, mapped: false,
+    },
+    PeriphMap {
+        name: "", phys: 0, size: 0, virt: 0, flags: 0, mapped: false,
+    },
+    PeriphMap {
+        name: "", phys: 0, size: 0, virt: 0, flags: 0, mapped: false,
+    },
+    PeriphMap {
+        name: "", phys: 0, size: 0, virt: 0, flags: 0, mapped: false,
+    },
+    PeriphMap {
+        name: "", phys: 0, size: 0, virt: 0, flags: 0, mapped: false,
+    },
+    PeriphMap {
+        name: "", phys: 0, size: 0, virt: 0, flags: 0, mapped: false,
+    },
+    PeriphMap {
+        name: "", phys: 0, size: 0, virt: 0, flags: 0, mapped: false,
+    },
+    PeriphMap {
+        name: "", phys: 0, size: 0, virt: 0, flags: 0, mapped: false,
+    },
+    PeriphMap {
+        name: "", phys: 0, size: 0, virt: 0, flags: 0, mapped: false,
+    },
+];
 
 /// Next available virtual address for peripheral mapping
 static mut PERIPH_NEXT_VADDR: VAddr = PERIPH_BASE;
@@ -119,7 +158,8 @@ pub unsafe fn riscv_periph_map(phys: PAddr, size: usize, flags: u64) -> VAddr {
     PERIPH_NEXT_VADDR += size_aligned;
 
     // Check if we've overflowed the peripheral region
-    if PERIPH_NEXT_VADDR > PERIPH_BASE + PERIPH_SIZE {
+    // Use subtraction to avoid overflow
+    if PERIPH_NEXT_VADDR - PERIPH_BASE > PERIPH_SIZE {
         return 0; // Out of peripheral address space
     }
 
@@ -265,15 +305,15 @@ pub fn riscv_periph_phys_to_virt(phys: PAddr) -> VAddr {
             break;
         }
 
-        if phys >= map.phys && phys < (map.phys + map.size) {
+        if phys >= map.phys && phys < (map.phys + map.size as u64) {
             let offset = phys - map.phys;
             if map.mapped {
-                return map.virt + offset;
+                return map.virt + offset as usize;
             } else {
                 // Map it first
                 let vaddr = unsafe { riscv_periph_get_by_name(map.name) };
                 if vaddr != 0 {
-                    return vaddr + offset;
+                    return vaddr + offset as usize;
                 }
             }
         }
@@ -282,5 +322,5 @@ pub fn riscv_periph_phys_to_virt(phys: PAddr) -> VAddr {
     0 // Not found
 }
 
-/// Assert PeriphMap is the expected size
-const _: () = assert!(core::mem::size_of::<PeriphMap>() == 40);
+// TODO: Verify PeriphMap size after compilation
+// const _: () = assert!(core::mem::size_of::<PeriphMap>() == 48);

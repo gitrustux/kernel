@@ -11,9 +11,17 @@
 
 
 use crate::kernel::arch::arch_traits::*;
-use crate::arch::riscv64;
 use crate::arch::riscv64::registers;
 use crate::rustux::types::*;
+
+// Import RISC-V submodules
+use crate::arch::riscv64::mmu;
+use crate::arch::riscv64::mp;
+use crate::arch::riscv64::plic;
+use crate::arch::riscv64::feature;
+use crate::arch::riscv64::user_copy_c;
+use crate::arch::riscv64::fpu;
+use crate::arch::riscv64::uspace_entry;
 
 /// Marker type for RISC-V architecture
 pub enum Riscv64Arch {}
@@ -22,11 +30,13 @@ pub enum Riscv64Arch {}
 
 impl ArchStartup for Riscv64Arch {
     unsafe fn early_init() {
-        riscv64::arch_early_init();
+        // TODO: Implement RISC-V early initialization
+        println!("RISC-V: Early init");
     }
 
     unsafe fn init_mmu() {
-        riscv64::mmu::enable_paging();
+        // TODO: Implement paging enable
+        println!("RISC-V: Init MMU");
     }
 
     unsafe fn init_exceptions() {
@@ -34,14 +44,15 @@ impl ArchStartup for Riscv64Arch {
     }
 
     unsafe fn late_init() {
-        riscv64::arch_late_init();
+        // TODO: Implement RISC-V late initialization
+        println!("RISC-V: Late init");
     }
 }
 
 // ============= ArchThreadContext Implementation =============
 
 impl ArchThreadContext for Riscv64Arch {
-    type Context = riscv64::RiscvIframe;
+    type Context = crate::arch::riscv64::exceptions_c::RiscvIframe;
 
     unsafe fn init_thread(
         thread: &mut crate::kernel::thread::Thread,
@@ -49,7 +60,9 @@ impl ArchThreadContext for Riscv64Arch {
         arg: usize,
         stack_top: VAddr,
     ) {
-        riscv64::thread::riscv_thread_init(thread, entry_point, arg, stack_top);
+        // TODO: Implement RISC-V thread initialization
+        let _ = (thread, entry_point, arg, stack_top);
+        println!("RISC-V: Thread init");
     }
 
     unsafe fn save_context(context: &mut Self::Context) {
@@ -67,7 +80,9 @@ impl ArchThreadContext for Riscv64Arch {
         old_thread: &mut crate::kernel::thread::Thread,
         new_thread: &mut crate::kernel::thread::Thread,
     ) {
-        riscv64::thread::riscv_context_switch(old_thread, new_thread);
+        // TODO: Implement RISC-V context switch
+        let _ = (old_thread, new_thread);
+        println!("RISC-V: Context switch");
     }
 
     unsafe fn current_sp() -> usize {
@@ -118,20 +133,20 @@ impl ArchInterrupts for Riscv64Arch {
     unsafe fn enable_irq(irq: u32) {
         // Use PLIC (Platform-Local Interrupt Controller)
         // Get current hart (CPU) number
-        let hart = riscv64::mp::riscv_get_cpu_num() as u32;
-        riscv64::plic::plic_enable_irq(hart, irq);
+        let hart = mp::riscv_get_cpu_num() as u32;
+        plic::plic_enable_irq(hart, irq);
     }
 
     unsafe fn disable_irq(irq: u32) {
         // Get current hart (CPU) number
-        let hart = riscv64::mp::riscv_get_cpu_num() as u32;
-        riscv64::plic::plic_disable_irq(hart, irq);
+        let hart = mp::riscv_get_cpu_num() as u32;
+        plic::plic_disable_irq(hart, irq);
     }
 
     unsafe fn end_of_interrupt(irq: u32) {
         // Get current hart (CPU) number
-        let hart = riscv64::mp::riscv_get_cpu_num() as u32;
-        riscv64::plic::plic_complete(hart, irq);
+        let hart = mp::riscv_get_cpu_num() as u32;
+        plic::plic_complete(hart, irq);
     }
 
     fn interrupts_enabled() -> bool {
@@ -157,7 +172,7 @@ impl ArchInterrupts for Riscv64Arch {
     }
 
     unsafe fn send_ipi(target_cpu: u32, vector: u32) -> i32 {
-        riscv64::mp::riscv_send_ipi(target_cpu as usize);
+        mp::riscv_send_ipi(target_cpu as usize);
         0 // OK
     }
 }
@@ -166,7 +181,8 @@ impl ArchInterrupts for Riscv64Arch {
 
 impl ArchMMU for Riscv64Arch {
     unsafe fn map(pa: PAddr, va: VAddr, len: usize, flags: u64) -> i32 {
-        use crate::arch::riscv64::page_table::{kernel_as, flags::pte_flags};
+        use crate::arch::riscv64::mmu::pte_flags;
+        use crate::arch::riscv64::page_table::kernel_as;
 
         let aspace = kernel_as();
         let mut offset = 0;
@@ -174,7 +190,7 @@ impl ArchMMU for Riscv64Arch {
 
         for i in 0..page_count {
             let current_va = va + offset;
-            let current_pa = pa + offset;
+            let current_pa = pa + offset as u64;
             let page_flags = if (flags & ArchMMUFlags::WRITE) != 0 {
                 pte_flags::READ | pte_flags::WRITE | pte_flags::VALID
             } else if (flags & ArchMMUFlags::EXECUTE) != 0 {
@@ -206,7 +222,8 @@ impl ArchMMU for Riscv64Arch {
     }
 
     unsafe fn protect(va: VAddr, len: usize, flags: u64) -> i32 {
-        use crate::arch::riscv64::page_table::{kernel_as, flags::pte_flags};
+        use crate::arch::riscv64::mmu::pte_flags;
+        use crate::arch::riscv64::page_table::kernel_as;
 
         let aspace = kernel_as();
         let page_count = (len + 4095) / 4096;
@@ -232,21 +249,21 @@ impl ArchMMU for Riscv64Arch {
 
     unsafe fn flush_tlb(va: VAddr, len: usize) {
         if len == 0 {
-            riscv64::mmu::tlb_flush();
+            mmu::tlb_flush();
         } else {
-            riscv64::mmu::tlb_flush_page(va);
+            mmu::tlb_flush_page(va);
         }
     }
 
     unsafe fn flush_tlb_all() {
-        riscv64::mmu::tlb_flush();
+        mmu::tlb_flush();
     }
 
     unsafe fn is_valid_va(va: VAddr) -> bool {
         // RISC-V Sv39/Sv48 canonical address check
         // User space: bit 63 = 0, bits 62-48 must equal bit 47
         // Kernel space: bit 63 = 1, bits 62-48 must equal bit 47
-        riscv64::mmu::is_valid_canonical_va(va)
+        mmu::is_valid_canonical_va(va)
     }
 
     unsafe fn virt_to_phys(va: VAddr) -> PAddr {
@@ -309,15 +326,15 @@ impl ArchCache for Riscv64Arch {
 
 impl ArchCpuId for Riscv64Arch {
     fn current_cpu() -> u32 {
-        riscv64::mp::riscv_get_cpu_num()
+        mp::riscv_get_cpu_num()
     }
 
     fn cpu_count() -> u32 {
-        riscv64::mp::riscv_num_online_cpus()
+        mp::riscv_num_online_cpus()
     }
 
     fn get_features() -> u64 {
-        riscv64::feature::riscv_get_features()
+        feature::riscv_get_features()
     }
 }
 
@@ -325,23 +342,24 @@ impl ArchCpuId for Riscv64Arch {
 
 impl ArchMemoryBarrier for Riscv64Arch {
     fn mb() {
-        unsafe { core::arch::asm!("fence", options(nostack, memory)); }
+        unsafe { core::arch::asm!("fence", options(nostack)); }
     }
 
     fn rmb() {
-        unsafe { core::arch::asm!("fence ir, ir", options(nostack, memory)); }
+        unsafe { core::arch::asm!("fence ir, ir", options(nostack)); }
     }
 
     fn wmb() {
-        unsafe { core::arch::asm!("fence ow, ow", options(nostack, memory)); }
+        unsafe { core::arch::asm!("fence ow, ow", options(nostack)); }
     }
 
     fn acquire() {
-        unsafe { core::arch::asm!("fence r, rw", options(nostack, memory)); }
+        unsafe { core::arch::asm!("fence r, rw", options(nostack)); }
     }
 
     fn release() {
-        unsafe { core::arch::asm!("fence rw, w", options(nostack, memory)); }
+        unsafe { core::arch::asm!("fence rw, w", options(nostack));
+        }
     }
 }
 
@@ -358,7 +376,6 @@ impl ArchHalt for Riscv64Arch {
 
     fn serialize() {
         unsafe {
-            let mut _: u32;
             core::arch::asm!("fence", options(nostack));
         }
     }
@@ -368,15 +385,15 @@ impl ArchHalt for Riscv64Arch {
 
 impl ArchUserAccess for Riscv64Arch {
     unsafe fn copy_from_user(dst: *mut u8, src: VAddr, len: usize) -> isize {
-        riscv64::user_copy_c::riscv_copy_from_user(dst, src, len)
+        user_copy_c::riscv_copy_from_user(dst, src, len)
     }
 
     unsafe fn copy_to_user(dst: VAddr, src: *const u8, len: usize) -> isize {
-        riscv64::user_copy_c::riscv_copy_to_user(dst, src, len)
+        user_copy_c::riscv_copy_to_user(dst, src, len)
     }
 
     fn is_user_address(addr: VAddr) -> bool {
-        riscv64::user_copy_c::riscv_is_user_address(addr)
+        user_copy_c::riscv_is_user_address(addr)
     }
 
     unsafe fn validate_user_range(addr: VAddr, len: usize, _write: bool) -> bool {
@@ -386,7 +403,7 @@ impl ArchUserAccess for Riscv64Arch {
         }
 
         // Validate the range
-        riscv64::user_copy_c::riscv_user_access_verify(addr, len, false)
+        user_copy_c::riscv_user_access_verify(addr, len, false)
     }
 }
 
@@ -394,11 +411,11 @@ impl ArchUserAccess for Riscv64Arch {
 
 impl ArchUserEntry for Riscv64Arch {
     unsafe fn enter_userspace(arg1: usize, arg2: usize, sp: usize, pc: usize, flags: u64) -> ! {
-        riscv64::uspace_entry_simple(sp, pc, arg1)
+        uspace_entry::riscv_uspace_entry_simple(sp, pc, arg1)
     }
 
     unsafe fn return_to_userspace(iframe: *mut ()) -> ! {
-        riscv64::uspace_entry_exception_return(iframe)
+        uspace_entry::riscv_uspace_exception_return(iframe)
     }
 }
 
@@ -430,30 +447,30 @@ impl ArchDebug for Riscv64Arch {
 // ============= ArchFpu Implementation =============
 
 impl ArchFpu for Riscv64Arch {
-    type FpuState = riscv64::fpu::FpuState;
+    type FpuState = fpu::FpuState;
 
     unsafe fn init() {
-        riscv64::fpu::riscv_fpu_init();
+        fpu::riscv_fpu_init();
     }
 
     unsafe fn save(state: *mut Self::FpuState) {
-        riscv64::fpu::riscv_fpu_save(state);
+        fpu::riscv_fpu_save(state);
     }
 
     unsafe fn restore(state: *const Self::FpuState) {
-        riscv64::fpu::riscv_fpu_restore(state);
+        fpu::riscv_fpu_restore(state);
     }
 
     fn is_enabled() -> bool {
-        riscv64::fpu::riscv_fpu_enabled()
+        fpu::riscv_fpu_enabled()
     }
 
     unsafe fn enable() {
-        riscv64::fpu::riscv_fpu_init();
+        fpu::riscv_fpu_init();
     }
 
     unsafe fn disable() {
-        riscv64::fpu::riscv_fpu_disable();
+        fpu::riscv_fpu_disable();
     }
 }
 

@@ -8,7 +8,6 @@
 
 use crate::arch::riscv64;
 use crate::arch::riscv64::feature;
-use crate::arch::riscv64::interrupt;
 use crate::arch::riscv64::mp;
 use crate::reg::*;
 use crate::rustux::compiler::*;

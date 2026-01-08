@@ -29,9 +29,9 @@ pub mod extensions {
 }
 
 /// Global feature flags
-pub mut riscv_features: u32 = 0;
-pub mut riscv_dcache_size: u32 = 64;  // Default 64-byte cache line
-pub mut riscv_icache_size: u32 = 64;  // Default 64-byte cache line
+pub static mut riscv_features: u32 = 0;
+pub static mut riscv_dcache_size: u32 = 64;  // Default 64-byte cache line
+pub static mut riscv_icache_size: u32 = 64;  // Default 64-byte cache line
 
 /// Detect CPU features at boot time
 pub fn riscv_feature_early_detect() {
@@ -42,15 +42,22 @@ pub fn riscv_feature_early_detect() {
     // 3. Detecting cache geometry from cbom/cboz extensions
 
     // For now, assume RV64GC (IMAFD) + C
-    riscv_features = (extensions::RISCV_ISA_EXT_I |
-                      extensions::RISCV_ISA_EXT_M |
-                      extensions::RISCV_ISA_EXT_A |
-                      extensions::RISCV_ISA_EXT_F |
-                      extensions::RISCV_ISA_EXT_D |
-                      extensions::RISCV_ISA_EXT_C) as u32;
+    unsafe {
+        riscv_features = (extensions::RISCV_ISA_EXT_I |
+                          extensions::RISCV_ISA_EXT_M |
+                          extensions::RISCV_ISA_EXT_A |
+                          extensions::RISCV_ISA_EXT_F |
+                          extensions::RISCV_ISA_EXT_D |
+                          extensions::RISCV_ISA_EXT_C) as u32;
+    }
+}
+
+/// Get CPU features as a u64 bitmask
+pub fn riscv_get_features() -> u64 {
+    unsafe { riscv_features as u64 }
 }
 
 /// Check if an extension is available
 pub fn has_extension(ext: u64) -> bool {
-    (riscv_features as u64) & ext != 0
+    unsafe { (riscv_features as u64) & ext != 0 }
 }

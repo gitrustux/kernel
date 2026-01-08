@@ -266,7 +266,7 @@ pub type ArchPageTableImpl = crate::kernel::arch::amd64::include::arch::aspace::
 
 /// Architecture-specific page table implementation selector
 #[cfg(target_arch = "riscv64")]
-pub type ArchPageTableImpl = crate::kernel::arch::riscv64::mmu::RiscvPageTable;
+pub type ArchPageTableImpl = crate::kernel::arch::riscv64::page_table::PageTable;
 
 /// High-level page table interface
 ///
@@ -281,17 +281,41 @@ impl PageTable {
     /// Create a new page table
     pub fn new() -> Result<Self> {
         Ok(Self {
-            inner: ArchPageTableImpl::new(),
+            inner: <ArchPageTableImpl as ArchPageTable>::new()?,
             asid: ASID_INVALID,
         })
     }
 
     /// Create a new kernel page table
     pub fn new_kernel() -> Result<Self> {
-        Ok(Self {
-            inner: ArchPageTableImpl::new_kernel()?,
-            asid: ASID_INVALID,
-        })
+        // Note: new_kernel() is not part of the ArchPageTable trait,
+        // so we need to call the inherent method directly
+        #[cfg(target_arch = "x86_64")]
+        {
+            use crate::kernel::arch::amd64::include::arch::aspace::X86PageTableMmu;
+            Ok(Self {
+                inner: X86PageTableMmu::new_kernel()?,
+                asid: ASID_INVALID,
+            })
+        }
+
+        #[cfg(target_arch = "aarch64")]
+        {
+            // ARM64 uses the same constructor
+            Ok(Self {
+                inner: <ArchPageTableImpl as ArchPageTable>::new()?,
+                asid: ASID_INVALID,
+            })
+        }
+
+        #[cfg(target_arch = "riscv64")]
+        {
+            // RISC-V uses the same constructor
+            Ok(Self {
+                inner: <ArchPageTableImpl as ArchPageTable>::new()?,
+                asid: ASID_INVALID,
+            })
+        }
     }
 
     /// Get the ASID for this page table
@@ -369,7 +393,7 @@ impl PageTable {
 
     /// Resolve a virtual address to physical address
     pub fn resolve(&self, vaddr: VAddr) -> Option<PAddr> {
-        self.inner.resolve(vaddr)
+        self.inner.resolve(vaddr).map(|p| p as usize)
     }
 
     /// Update protection flags for a mapping
@@ -420,7 +444,7 @@ impl PageTable {
 
     /// Get the physical address of the root page table
     pub fn root_phys(&self) -> PAddr {
-        self.inner.root_phys()
+        self.inner.root_phys() as usize
     }
 }
 

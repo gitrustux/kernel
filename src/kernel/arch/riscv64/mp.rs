@@ -26,6 +26,7 @@ static mut ACTIVE_CPUS: u32 = 0;
 
 /// Per-hart data structure
 #[repr(C)]
+#[derive(Copy, Clone)]
 pub struct PerHartData {
     /// Hart ID
     pub hart_id: usize,
@@ -449,6 +450,7 @@ pub unsafe fn riscv_get_num_harts_from_dt() -> usize {
 
 /// MP initialization state
 #[repr(C)]
+#[derive(Copy, Clone)]
 pub enum MpInitState {
     NotStarted = 0,
     InProgress = 1,

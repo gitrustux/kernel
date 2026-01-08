@@ -56,7 +56,7 @@ pub fn arch_early_init() {
 
     #[cfg(target_arch = "riscv64")]
     unsafe {
-        riscv64::arch_early_init();
+        riscv64::arch::arch_early_init();
     }
 }
 
@@ -74,7 +74,7 @@ pub fn arch_init() {
 
     #[cfg(target_arch = "riscv64")]
     unsafe {
-        riscv64::arch_init();
+        riscv64::arch::arch_init();
     }
 }
 
@@ -96,7 +96,7 @@ pub use arm64::include::arch::arch_ops::{arch_curr_cpu_num};
 pub use amd64::include::arch::arch_ops;
 
 #[cfg(target_arch = "riscv64")]
-pub use riscv64::include::arch::arch_ops::{arch_curr_cpu_num};
+pub use riscv64::include::arch::arch_ops;
 
 // Re-export kernel modules for compatibility
 pub use crate::kernel::mp;
@@ -119,7 +119,7 @@ pub use arm64::aspace;
 pub use amd64::include::arch::aspace;
 
 #[cfg(target_arch = "riscv64")]
-pub use riscv64::aspace;
+pub use crate::vm::aspace;
 
 // Re-export arm64 submodules for compatibility
 // Note: interrupt module doesn't exist, only interrupts.rs
@@ -138,4 +138,4 @@ pub use arm64::user_copy;
 pub use crate::kernel::arch::amd64::include::arch::amd64::user_copy;
 
 #[cfg(target_arch = "riscv64")]
-pub use riscv64::user_copy;
+pub use riscv64::user_copy_c;

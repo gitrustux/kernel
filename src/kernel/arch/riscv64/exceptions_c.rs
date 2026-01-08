@@ -20,6 +20,7 @@ use crate::rustux::types::*;
 ///
 /// Captures the processor state at exception time
 #[repr(C)]
+#[derive(Debug)]
 pub struct RiscvIframe {
     /// General-purpose registers
     pub ra: u64,   // x1 (return address)

@@ -82,8 +82,9 @@ pub use crate::kernel::arch::arm64::mmu::arch_zero_page;
 #[cfg(target_arch = "x86_64")]
 pub use crate::kernel::arch::amd64::asm::arch_zero_page;
 
+// TODO: Implement arch_zero_page for RISC-V
 #[cfg(target_arch = "riscv64")]
-pub use crate::kernel::arch::riscv64::mmu::arch_zero_page;
+pub use crate::kernel::arch::riscv64::mmu;
 
 // ============================================================================
 // Page Fault Flags

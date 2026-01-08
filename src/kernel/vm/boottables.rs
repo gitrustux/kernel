@@ -242,7 +242,8 @@ fn setup_kernel_stacks(aspace: &AddressSpace) -> Result {
     let stacks_base = layout_arch::KERNEL_HEAP_BASE + layout_arch::KERNEL_HEAP_SIZE;
 
     #[cfg(target_arch = "riscv64")]
-    let stacks_base = layout_arch::KERNEL_HEAP_BASE + layout_arch::KERNEL_HEAP_SIZE;
+    let stacks_base = layout_arch::KERNEL_HEAP_BASE.checked_add(layout_arch::KERNEL_HEAP_SIZE)
+        .expect("RISC-V kernel heap layout would overflow");
 
     // Allocate physical pages for stacks
     let total_pages = STACK_REGION_SIZE / PAGE_SIZE;
@@ -401,7 +402,8 @@ pub unsafe extern "C" fn boot_create_page_tables() -> PAddr {
 
     #[cfg(target_arch = "riscv64")]
     {
-        crate::kernel::arch::riscv64::boot_mmu::riscv_boot_create_page_tables()
+        // RISC-V uses riscv_early_mmu_init instead
+        crate::kernel::arch::riscv64::boot_mmu::riscv_early_mmu_init(0) as usize
     }
 }
 
@@ -435,8 +437,8 @@ pub fn finalize_kernel_aspace() -> Result {
 
         #[cfg(target_arch = "riscv64")]
         {
-            let root = aspace.root_phys();
-            crate::arch::riscv64::mmu::write_satp(root);
+            let root = aspace.root_phys() as u64;
+            crate::arch::riscv64::mmu::set_satp(root);
         }
     }
 

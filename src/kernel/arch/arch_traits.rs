@@ -27,6 +27,24 @@ pub const ARCH_PAGE_SIZE_SHIFT: u32 = 12;
 /// Page mask
 pub const ARCH_PAGE_MASK: usize = ARCH_PAGE_SIZE - 1;
 
+/// Architecture MMU flags
+///
+/// These flags are used by the ArchMMU trait methods to specify
+/// page protection and mapping attributes.
+pub mod ArchMMUFlags {
+    /// Read permission
+    pub const READ: u64 = 1 << 0;
+
+    /// Write permission
+    pub const WRITE: u64 = 1 << 1;
+
+    /// Execute permission
+    pub const EXECUTE: u64 = 1 << 2;
+
+    /// User-accessible mapping
+    pub const USER: u64 = 1 << 3;
+}
+
 /// Architecture startup and initialization
 pub trait ArchStartup {
     /// Early initialization called from assembly entry point

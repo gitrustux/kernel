@@ -25,7 +25,9 @@ pub mod plic;
 pub mod registers;
 pub mod spinlock;
 pub mod thread;
+pub mod timer;
 pub mod user_copy_c;
+pub mod uspace_entry;
 
 // Include directory for public definitions
 pub mod include;

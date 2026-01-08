@@ -233,7 +233,8 @@ fn dump_kernel_regions() {
             riscv::KERNEL_PERCPU_BASE);
         log_info!("  PHYSMAP: {:#x} - {:#x}",
             riscv::KERNEL_PHYSMAP_BASE,
-            riscv::KERNEL_PHYSMAP_BASE + riscv::KERNEL_PHYSMAP_SIZE);
+            riscv::KERNEL_PHYSMAP_BASE.checked_add(riscv::KERNEL_PHYSMAP_SIZE)
+                .expect("RISC-V kernel physmap layout would overflow"));
     }
 }
 

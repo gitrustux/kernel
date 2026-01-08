@@ -16,6 +16,11 @@ use crate::arch::riscv64::registers;
 use crate::rustux::types::*;
 use core::ptr;
 
+// External boot allocator function (defined in start.S)
+extern "C" {
+    fn boot_alloc_page_phys() -> PAddr;
+}
+
 // Page size and shift
 const PAGE_SIZE: usize = 4096;
 const PAGE_SIZE_SHIFT: u32 = 12;
@@ -59,7 +64,6 @@ fn sv39_vpn_index(vaddr: usize, level: usize) -> usize {
 ///
 /// Must only be called during early boot when the boot allocator is available
 #[no_mangle]
-#[no_sanitize(address, memory, thread)]
 pub unsafe extern "C" fn boot_alloc_ptable() -> *mut pte_t {
     extern "C" {
         fn boot_alloc_page_phys() -> PAddr;
@@ -98,7 +102,6 @@ pub unsafe extern "C" fn boot_alloc_ptable() -> *mut pte_t {
 /// # Safety
 ///
 /// Must be called with valid physical addresses and during early boot
-#[no_sanitize(address, memory, thread)]
 unsafe fn riscv_boot_map(
     root_table: PAddr,
     vaddr: VAddr,
@@ -139,7 +142,7 @@ unsafe fn riscv_boot_map(
 
         // At level 0, we can create the final mapping
         let index = sv39_vpn_index(vaddr + offset, 0);
-        let final_pte = ((paddr + offset) & !(PAGE_SIZE - 1)) | flags;
+        let final_pte = ((paddr + offset as u64) & !((PAGE_SIZE - 1) as u64)) | flags;
         table_va.add(index).write_volatile(final_pte);
 
         offset += PAGE_SIZE;
@@ -166,7 +169,7 @@ pub unsafe extern "C" fn riscv_boot_identity_map(
     end: PAddr,
 ) -> i32 {
     let len = end - start;
-    riscv_boot_map(root_table, start, start, len, PTE_KERNEL_RWX)
+    riscv_boot_map(root_table, start as usize, start, len as usize, PTE_KERNEL_RWX)
 }
 
 /// Map kernel to its high virtual address
@@ -186,8 +189,8 @@ pub unsafe extern "C" fn riscv_boot_map_kernel(
     phys_start: PAddr,
     phys_end: PAddr,
 ) -> i32 {
-    let len = phys_end - phys_start;
-    let virt_start = KERNEL_BASE + phys_start;
+    let len = (phys_end - phys_start) as usize;
+    let virt_start = KERNEL_BASE as usize + phys_start as usize;
     riscv_boot_map(root_table, virt_start, phys_start, len, PTE_KERNEL_RWX)
 }
 

@@ -114,10 +114,9 @@ pub fn tlb_flush() {
 #[inline(always)]
 pub fn tlb_flush_asid(asid: Asid) {
     unsafe {
-        core::arch::asm!("sfence.vma zero, {asid}",
-            asid = in(reg) asid,
-            // clobber register
-            out(reg) _,
+        core::arch::asm!("sfence.vma zero, {}",
+            in(reg) asid,
+            options(nostack),
         );
     }
 }
@@ -157,4 +156,27 @@ pub fn enable_paging() {
     // Set SATP to enable Sv39/Sv48 paging
     // The actual root page table PPN should be set by the caller
     tlb_flush();
+}
+
+/// Check if a virtual address is canonical for RISC-V Sv39/Sv48
+///
+/// For Sv39 (39-bit virtual addresses):
+/// - User space: bits 63:39 must be 0
+/// - Kernel space: bits 63:39 must be 1
+///
+/// For Sv48 (48-bit virtual addresses):
+/// - User space: bits 63:48 must be 0
+/// - Kernel space: bits 63:48 must be 1
+pub fn is_valid_canonical_va(va: usize) -> bool {
+    // For Sv39, check bits 63:39
+    // For Sv48, check bits 63:48
+    // We'll use the more restrictive Sv39 check for now
+
+    const VA_BITS: u32 = 39;
+    const VA_MASK: usize = ((1usize << (64 - VA_BITS)) - 1) << VA_BITS;
+
+    let sign_bit = (va >> (VA_BITS - 1)) & 1;
+    let sign_ext = if sign_bit != 0 { VA_MASK } else { 0 };
+
+    (va & VA_MASK) == sign_ext
 }

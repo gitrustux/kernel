@@ -421,8 +421,21 @@ pub use user_copy_c::{
 // MPID Functions (Stubs)
 // ============================================================================
 
-/// Extract MPID from MPIDR register value
-pub const fn ARM64_MPID(_mpidr: u64) -> u64 {
-    // TODO: Implement MPID extraction
-    0
+/// Construct MPIDR value from cluster and CPU ID
+///
+/// Constructs a Multi-Processor ID (MPIDR) register value from cluster
+/// and CPU identifiers. The MPIDR format is:
+/// - AFF2 (bits 16-23): Cluster number
+/// - AFF0 (bits 0-7):   CPU number within cluster
+///
+/// # Arguments
+///
+/// * `cluster` - Cluster number (AFF2 field)
+/// * `cpuid` - CPU ID within the cluster (AFF0 field)
+///
+/// # Returns
+///
+/// MPIDR register value
+pub const fn ARM64_MPID(cluster: u64, cpuid: u64) -> u64 {
+    ((cluster & 0xFF) << MPIDR_AFF2_SHIFT) | (cpuid & 0xFF)
 }

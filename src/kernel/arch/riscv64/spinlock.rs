@@ -30,36 +30,33 @@ impl SpinLock {
     pub fn acquire(&self) {
         while self.try_acquire() == false {
             // Spin with pause hint
-            riscv64::ops::arch_spinloop_pause();
+            ops::arch_spinloop_pause();
         }
     }
 
     /// Try to acquire the spinlock without blocking
     #[inline(always)]
     pub fn try_acquire(&self) -> bool {
-        let result: bool;
+        let result: i32;
         unsafe {
             core::arch::asm!(
                 "1:",
-                "lr.d w, ({ptr})",     // Load-reserved
+                "lr.d w, ({0})",     // Load-reserved
                 "bnez w, 2f",          // If locked, fail
                 "li a0, 1",
-                "sc.d a0, a0, ({ptr})", // Store-conditional
+                "sc.d a0, a0, ({0})", // Store-conditional
                 "bnez a0, 1b",         // Retry if SC failed
-                "li {result}, 1",      // Success
+                "li {1}, 1",      // Success
                 "j 3f",
                 "2:",
-                "li {result}, 0",      // Failure
+                "li {1}, 0",      // Failure
                 "3:",
-                ptr = in(reg) self.lock.as_ptr(),
-                result = out(reg) result,
-                // Clobbers
-                out(reg) _,
-                out(reg) _,
+                in(reg) self.lock.as_ptr(),
+                out(reg) result,
                 options(nostack),
             );
         }
-        result
+        result != 0
     }
 
     /// Release the spinlock
@@ -91,7 +88,7 @@ impl SpinLockSaveIrqSave {
 /// Save interrupt state and acquire spinlock
 #[inline(always)]
 pub fn spin_lock_save(lock: &SpinLock, state: &mut SpinLockSaveIrqSave) {
-    state.state = unsafe { riscv64::ops::arch_disable_ints() };
+    state.state = unsafe { ops::arch_disable_ints() };
     lock.acquire();
 }
 
@@ -99,5 +96,5 @@ pub fn spin_lock_save(lock: &SpinLock, state: &mut SpinLockSaveIrqSave) {
 #[inline(always)]
 pub fn spin_unlock_restore(lock: &SpinLock, state: &SpinLockSaveIrqSave) {
     lock.release();
-    unsafe { riscv64::ops::arch_restore_ints(state.state) };
+    unsafe { ops::arch_restore_ints(state.state) };
 }

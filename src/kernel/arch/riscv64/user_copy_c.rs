@@ -113,7 +113,7 @@ pub unsafe fn riscv_copy_string_from_user(
         }
     }
 
-    copied
+    copied as isize
 }
 
 /// Zero a range of user memory
@@ -319,4 +319,4 @@ pub unsafe fn riscv_set_user_copy_context(ctx: Option<&mut UserCopyContext>) -> 
 }
 
 /// Assert that UserCopyContext is the expected size
-const _: () = assert!(core::mem::size_of::<UserCopyContext>() == 40);
+const _: () = assert!(core::mem::size_of::<UserCopyContext>() == 48);

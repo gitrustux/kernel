@@ -259,7 +259,7 @@ pub struct ArchContext {
     pub inner: crate::kernel::arch::amd64::X86ThreadStateGeneralRegs,
 
     #[cfg(target_arch = "riscv64")]
-    pub inner: crate::kernel::arch::riscv64::RiscvIframe,
+    pub inner: crate::kernel::arch::riscv64::exceptions_c::RiscvIframe,
 }
 
 /// Architecture-specific data for debugger access
@@ -338,7 +338,7 @@ pub struct ArchData {
 
     /// Pointer to suspended general registers
     #[cfg(target_arch = "riscv64")]
-    pub suspended_general_regs: *const crate::kernel::arch::riscv64::RiscvIframe,
+    pub suspended_general_regs: *const crate::kernel::arch::riscv64::exceptions_c::RiscvIframe,
 }
 
 impl ArchData {

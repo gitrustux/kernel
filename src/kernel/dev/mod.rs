@@ -23,6 +23,18 @@ pub mod timer;
 // PCIe bus driver
 pub mod pcie;
 
+// Hardware Random Number Generator
+pub mod hw_rng;
+
+// Intel-specific RNG (RDSEED/RDRAND)
+pub mod intel_rng;
+
+// Userspace display (framebuffer)
+pub mod udisplay;
+
+// ARM PSCI (Power State Coordination Interface)
+pub mod psci;
+
 // Re-exports
 pub use uart::*;
 pub use interrupt::*;

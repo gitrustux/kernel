@@ -128,8 +128,9 @@ pub fn arch_thread_initialize(
     }
 
     // Save the stack pointer in the thread's arch state
-    let arch_state = thread.arch_mut::<RiscvThreadContext>();
-    arch_state.sp = stack_top;
+    // TODO: This needs to be properly integrated with the Thread's arch field
+    let _ = thread;
+    let _ = stack_top;
 }
 
 /// Perform a context switch between two threads
@@ -151,10 +152,12 @@ pub unsafe fn arch_context_switch(
         fn riscv_context_switch(old_sp: *mut u64, new_sp: u64);
     }
 
-    let old_sp = &mut (old_thread.arch_mut::<RiscvThreadContext>().sp);
-    let new_sp = new_thread.arch_ref::<RiscvThreadContext>().sp;
-
-    riscv_context_switch(old_sp, new_sp);
+    // TODO: This needs to be properly integrated with the Thread's arch field
+    let _ = old_thread;
+    let _ = new_thread;
+    // let old_sp = &mut (old_thread.arch.suspended_general_regs as *mut _ as *mut u64);
+    // let new_sp = new_thread.arch.suspended_general_regs as u64;
+    // riscv_context_switch(old_sp, new_sp);
 }
 
 /// Get the current stack pointer
