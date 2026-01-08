@@ -1,6 +1,6 @@
 [package]
 name = "rustux"
-version = "0.1.0"
+version = "0.0.1"
 edition = "2021"
 authors = ["Antonio Castillo <lacrimatus@gmail.com>"]
 description = "A secure, high-performance microkernel written in Rust."
