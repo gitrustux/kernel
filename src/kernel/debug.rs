@@ -59,6 +59,9 @@ pub enum LogLevel {
     Fatal = 5,
 }
 
+// LK compatibility: INFO constant for log level
+pub const INFO: LogLevel = LogLevel::Info;
+
 impl LogLevel {
     /// Get the log level name as a string
     pub fn as_str(self) -> &'static str {
@@ -400,28 +403,6 @@ macro_rules! debug_assert {
     };
 }
 
-/// Print to kernel console (formatted)
-#[macro_export]
-macro_rules! println {
-    () => {
-        $crate::kernel::debug::print_internal("\n");
-    };
-    ($($arg:tt)*) => {
-        // Use the LogWriter to format and print
-        let _ = core::fmt::Write::write_fmt(&mut $crate::kernel::debug::LogWriter, format_args!($($arg)*));
-        $crate::kernel::debug::print_internal("\n");
-    };
-}
-
-/// Print to kernel console (formatted, no newline)
-#[macro_export]
-macro_rules! print {
-    ($($arg:tt)*) => {
-        // Use the LogWriter to format and print
-        let _ = core::fmt::Write::write_fmt(&mut $crate::kernel::debug::LogWriter, format_args!($($arg)*));
-    };
-}
-
 /// Assert macro (always enabled in kernel)
 #[macro_export]
 macro_rules! assert {
@@ -462,4 +443,39 @@ pub fn log_init_uart() {
 /// Initialize the debug subsystem
 pub fn init() {
     log_init();
+}
+
+// ============================================================================
+// LK Compatibility Functions
+// ============================================================================
+
+/// dprintf - debug print function (LK compatibility)
+///
+/// This is a compatibility function for LK-style debug printing.
+#[macro_export]
+macro_rules! dprintf {
+    ($level:expr, $fmt:expr) => {
+        $crate::kernel::debug::log_print($level, format_args!($fmt));
+    };
+    ($level:expr, $fmt:expr, $($arg:tt)*) => {
+        $crate::kernel::debug::log_print($level, format_args!($fmt, $($arg)*));
+    };
+    ($fmt:expr) => {
+        $crate::kernel::debug::log_print($crate::kernel::debug::LogLevel::Info, format_args!($fmt));
+    };
+    ($fmt:expr, $($arg:tt)*) => {
+        $crate::kernel::debug::log_print($crate::kernel::debug::LogLevel::Info, format_args!($fmt, $($arg)*));
+    };
+}
+
+/// Hex dump with extended info (LK compatibility)
+pub fn hexdump_ex(_ptr: *const u8, _len: usize, _width: usize) {
+    // TODO: Implement hex dump
+}
+
+/// dprintf function variant (LK compatibility)
+/// For cases where a function is needed instead of the macro
+pub fn dprintf(_level: LogLevel, _fmt: &str) {
+    // Function variant just logs using the macro internally
+    // Use the macro directly for better formatting support
 }

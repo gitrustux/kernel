@@ -7,10 +7,12 @@
 
 use crate::arch::arm64;
 use crate::arch::arm64::feature;
-use crate::arch::arm64::interrupt;
+use crate::arch::arm64::interrupts;
 use crate::arch::arm64::mp;
 use crate::reg::*;
 use crate::rustux::compiler::*;
+use crate::rustux::types::VAddr;
+use crate::rustux::types::PAddr as paddr_t;
 
 pub const ENABLE_CYCLE_COUNTER: u32 = 1;
 
@@ -60,4 +62,77 @@ pub fn arch_icache_line_size() -> u32 {
 #[inline(always)]
 pub fn arch_trace_process_create(_pid: u64, _tt_phys: paddr_t) {
     // nothing to do
+}
+
+/// Get the current CPU number
+#[inline(always)]
+pub fn arch_curr_cpu_num() -> u32 {
+    unsafe { mp::arch_curr_cpu_num() }
+}
+
+/// Enable IRQ interrupts
+#[inline(always)]
+pub fn arch_enable_ints() {
+    interrupts::arch_enable_ints();
+}
+
+/// Disable IRQ interrupts
+#[inline(always)]
+pub fn arch_disable_ints() {
+    interrupts::arch_disable_ints();
+}
+
+/// Check if IRQ interrupts are disabled
+#[inline(always)]
+pub fn arch_ints_disabled() -> bool {
+    interrupts::arch_ints_disabled()
+}
+
+/// Save current interrupt state
+#[inline(always)]
+pub fn arch_save_ints() -> u64 {
+    interrupts::arch_save_ints()
+}
+
+/// Restore interrupt state
+#[inline(always)]
+pub fn arch_restore_ints(state: u64) {
+    interrupts::arch_restore_ints(state);
+}
+
+/// Check if an address is in user space
+#[inline(always)]
+pub fn arch_is_user_address(addr: VAddr) -> bool {
+    // ARM64 user space is typically 0x0000_0000_0000_0000 to 0x0000_ffff_ffff_ffff
+    // Kernel space starts at 0xffff_0000_0000_0000
+    addr < 0x1_0000_0000_0000
+}
+
+/// Clean cache range (data cache clean by address)
+#[inline(always)]
+pub fn arch_clean_cache_range(_addr: VAddr, _len: usize) {
+    // TODO: Implement cache clean
+    unsafe {
+        core::arch::asm!("dsb sy");
+    }
+}
+
+/// Disable interrupts and return state
+#[inline(always)]
+pub fn arch_interrupt_save(_flags: u64) -> u64 {
+    unsafe {
+        let daif: u64;
+        core::arch::asm!("mrs {}, daif", out(reg) daif, options(nomem, nostack));
+        // Disable IRQs (set bit 7)
+        core::arch::asm!("msr daifset, #2");
+        daif
+    }
+}
+
+/// Restore interrupt state
+#[inline(always)]
+pub fn arch_interrupt_restore(state: u64, _flags: u64) {
+    unsafe {
+        core::arch::asm!("msr daif, {}", in(reg) state);
+    }
 }

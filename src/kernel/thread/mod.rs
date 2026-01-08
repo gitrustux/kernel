@@ -273,13 +273,37 @@ pub struct ArchData {
     #[cfg(target_arch = "aarch64")]
     pub suspended_general_regs: *const crate::kernel::arch::arm64::RiscvIframe,
 
+    /// Stack pointer (for aarch64)
+    #[cfg(target_arch = "aarch64")]
+    pub sp: VAddr,
+
+    /// Stack guard value (for aarch64)
+    #[cfg(target_arch = "aarch64")]
+    pub stack_guard: u64,
+
+    /// Unsafe stack pointer (for aarch64 with safe_stack feature)
+    #[cfg(all(target_arch = "aarch64", feature = "safe_stack"))]
+    pub unsafe_sp: VAddr,
+
+    /// Current per-CPU pointer (for aarch64)
+    #[cfg(target_arch = "aarch64")]
+    pub current_percpu_ptr: *mut u8,
+
+    /// Track debug state flag (for aarch64)
+    #[cfg(target_arch = "aarch64")]
+    pub track_debug_state: bool,
+
+    /// Debug state (for aarch64)
+    #[cfg(target_arch = "aarch64")]
+    pub debug_state: crate::kernel::arch::arm64::thread::Arm64DebugState,
+
+    /// FP state pointer (for aarch64)
+    #[cfg(target_arch = "aarch64")]
+    pub fpstate: *mut core::ffi::c_void,
+
     /// Pointer to suspended general registers
     #[cfg(target_arch = "x86_64")]
     pub suspended_general_regs: *const crate::kernel::arch::amd64::X86ThreadStateGeneralRegs,
-
-    /// Pointer to suspended general registers
-    #[cfg(target_arch = "riscv64")]
-    pub suspended_general_regs: *const crate::kernel::arch::riscv64::RiscvIframe,
 
     /// Stack pointer (for x86_64)
     #[cfg(target_arch = "x86_64")]
@@ -304,6 +328,10 @@ pub struct ArchData {
     /// Extended register state (FXSAVE area) for x86_64
     #[cfg(target_arch = "x86_64")]
     pub extended_register_state: *mut core::ffi::c_void,
+
+    /// Pointer to suspended general registers
+    #[cfg(target_arch = "riscv64")]
+    pub suspended_general_regs: *const crate::kernel::arch::riscv64::RiscvIframe,
 }
 
 impl ArchData {
@@ -312,9 +340,21 @@ impl ArchData {
         Self {
             #[cfg(target_arch = "aarch64")]
             suspended_general_regs: core::ptr::null(),
+            #[cfg(target_arch = "aarch64")]
+            sp: 0,
+            #[cfg(target_arch = "aarch64")]
+            stack_guard: 0,
+            #[cfg(all(target_arch = "aarch64", feature = "safe_stack"))]
+            unsafe_sp: 0,
+            #[cfg(target_arch = "aarch64")]
+            current_percpu_ptr: core::ptr::null_mut(),
+            #[cfg(target_arch = "aarch64")]
+            track_debug_state: false,
+            #[cfg(target_arch = "aarch64")]
+            debug_state: crate::kernel::arch::arm64::thread::Arm64DebugState::default(),
+            #[cfg(target_arch = "aarch64")]
+            fpstate: core::ptr::null_mut(),
             #[cfg(target_arch = "x86_64")]
-            suspended_general_regs: core::ptr::null(),
-            #[cfg(target_arch = "riscv64")]
             suspended_general_regs: core::ptr::null(),
             #[cfg(target_arch = "x86_64")]
             sp: 0,
@@ -328,6 +368,8 @@ impl ArchData {
             track_debug_state: false,
             #[cfg(target_arch = "x86_64")]
             extended_register_state: core::ptr::null_mut(),
+            #[cfg(target_arch = "riscv64")]
+            suspended_general_regs: core::ptr::null(),
         }
     }
 }
@@ -891,6 +933,41 @@ pub fn init() {
 
     // Create idle thread for CPU 0
     // Thread::new_idle(0);
+}
+
+// ============================================================================
+// LK Compatibility Types and Functions
+// ============================================================================
+
+/// Kernel stack type (LK compatibility)
+pub type kstack_t = *mut u8;
+
+/// Preempt current thread (LK compatibility stub)
+pub fn thread_preempt() {
+    // TODO: Implement thread preemption
+}
+
+/// Check if thread is signaled (LK compatibility stub)
+pub fn thread_is_signaled(_thread: Option<&Thread>) -> bool {
+    // TODO: Implement signal checking
+    false
+}
+
+/// Process pending signals (LK compatibility stub)
+pub fn thread_process_pending_signals() {
+    // TODO: Implement signal processing
+}
+
+/// Secondary CPU early init (LK compatibility stub)
+pub fn thread_secondary_cpu_init_early() {
+    // TODO: Implement secondary CPU early thread init
+}
+
+/// Yield the current thread (LK compatibility stub)
+pub fn yield_current() {
+    // TODO: Implement thread yielding
+    // For now, just hint to the CPU
+    core::hint::spin_loop();
 }
 
 // ============================================================================

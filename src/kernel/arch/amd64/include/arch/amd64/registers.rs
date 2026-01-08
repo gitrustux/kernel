@@ -580,3 +580,19 @@ pub unsafe fn x86_set_extended_register_pt_state(threads: bool) {
 /// # Returns
 ///
 /// The 64-bit value of the specified XCR register
+pub unsafe fn x86_read_xcr(reg: u32) -> u64 {
+    // TODO: Implement XCR register read
+    0
+}
+
+// FFI declarations for extended register functions
+extern "C" {
+    fn sys_x86_extended_register_init();
+    fn sys_x86_extended_register_size() -> usize;
+    fn sys_x86_extended_register_enable_feature(feature: X86ExtendedRegisterFeature) -> bool;
+    fn sys_x86_extended_register_init_state(buffer: *mut core::ffi::c_void);
+    fn sys_x86_extended_register_save_state(buffer: *mut core::ffi::c_void);
+    fn sys_x86_extended_register_restore_state(buffer: *const core::ffi::c_void);
+    fn sys_x86_extended_register_context_switch(old_thread: *mut Thread, new_thread: *mut Thread);
+    fn sys_x86_set_extended_register_pt_state(threads: bool);
+}

@@ -31,6 +31,19 @@
 
 #![no_std]
 
+// ============================================================================
+// LK Compatibility Constants
+// ============================================================================
+
+/// LK initialization level: earliest
+pub const LK_INIT_LEVEL_EARLIEST: u32 = 0;
+
+/// LK initialization level: threading
+pub const LK_INIT_LEVEL_THREADING: u32 = 1;
+
+/// LK initialization flag: secondary CPUs
+pub const LK_INIT_FLAG_SECONDARY_CPUS: u32 = 1 << 0;
+
 use crate::kernel::vm;
 use crate::kernel::pmm;
 use crate::kernel::thread;

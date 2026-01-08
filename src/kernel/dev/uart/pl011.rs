@@ -47,7 +47,7 @@
 #![no_std]
 
 use crate::arch::arm64::periphmap;
-use crate::debug;
+use crate::{log_info, log_error, log_debug};
 use crate::kernel::sync;
 use core::sync::atomic::{AtomicBool, Ordering};
 use crate::kernel::sync::spin::SpinMutex as SpinMutex;
@@ -134,7 +134,7 @@ static UART_TX_IRQ_ENABLED: AtomicBool = AtomicBool::new(false);
 static UART_RX_BUF: SpinMutex<CircularBuffer<u8, RXBUF_SIZE>> = SpinMutex::new(CircularBuffer::new());
 
 /// TX event for blocking writes
-static UART_DPUTC_EVENT: sync::Event = sync::Event::new(false);
+static UART_DPUTC_EVENT: sync::Event = sync::Event::new(false, sync::EventFlags::empty());
 
 /// Spinlock for TX operations
 static UART_SPINLOCK: SpinMutex<()> = SpinMutex::new(());
@@ -301,7 +301,7 @@ pub fn pl011_getc(block: bool) -> Option<u8> {
         }
 
         // Yield and wait for more data
-        crate::kernel::thread::yield();
+        crate::kernel::thread::yield_current();
     }
 }
 
@@ -394,7 +394,7 @@ pub unsafe fn pl011_init_early(mmio_phys: u64, irq: u32) {
     // Map physical address to virtual
     let base = periphmap::periph_paddr_to_vaddr(mmio_phys);
     if base == 0 {
-        debug::log_error!("PL011: Failed to map MMIO address");
+        log_error!("PL011: Failed to map MMIO address");
         return;
     }
 
@@ -405,7 +405,7 @@ pub unsafe fn pl011_init_early(mmio_phys: u64, irq: u32) {
     // Enable UART and TX
     uart_write(base, UART_CR, CR_TXE | CR_UARTEN);
 
-    debug::log_info!("PL011: Early init complete, base={:#x}, irq={}", base, irq);
+    log_info!("PL011: Early init complete, base={:#x}, irq={}", base, irq);
 }
 
 /// Full UART initialization (with interrupts)
@@ -420,7 +420,7 @@ pub unsafe fn pl011_init() {
     let irq = *UART_IRQ.lock();
 
     if base == 0 || irq == 0 {
-        debug::log_error!("PL011: Not initialized, call pl011_init_early first");
+        log_error!("PL011: Not initialized, call pl011_init_early first");
         return;
     }
 
@@ -447,7 +447,7 @@ pub unsafe fn pl011_init() {
     // Enable TX interrupt-driven mode
     UART_TX_IRQ_ENABLED.store(true, Ordering::Release);
 
-    debug::log_info!("PL011: Full init complete, IRQ-driven TX enabled");
+    log_info!("PL011: Full init complete, IRQ-driven TX enabled");
 }
 
 /// Disable IRQ-driven mode (called during panic)

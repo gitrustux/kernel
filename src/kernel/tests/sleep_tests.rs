@@ -29,7 +29,7 @@ fn sleep_duration_test() -> TestResult {
 
         if actual_ms < TARGET_MS {
             early_wakeups += 1;
-            debug::log_debug!(
+            log_debug!(
                 "Sleep iteration {}: woke after {} ms (target {} ms)",
                 i, actual_ms, TARGET_MS
             );
@@ -37,10 +37,10 @@ fn sleep_duration_test() -> TestResult {
     }
 
     if early_wakeups > 0 {
-        debug::log_debug!("Warning: {} early wakeups detected", early_wakeups);
+        log_debug!("Warning: {} early wakeups detected", early_wakeups);
     }
 
-    debug::log_info!("Sleep duration test passed");
+    log_info!("Sleep duration test passed");
     Ok(())
 }
 
@@ -68,10 +68,10 @@ fn sleep_consistency_test() -> TestResult {
         let variance_percent = (variance * 100) / SLEEP_NS;
 
         assert_le!(variance_percent, 20, "Sleep variance too high");
-        debug::log_debug!("Sleep {}: {} ns (variance: {}%)", i, duration, variance_percent);
+        log_debug!("Sleep {}: {} ns (variance: {}%)", i, duration, variance_percent);
     }
 
-    debug::log_info!("Sleep consistency test passed");
+    log_info!("Sleep consistency test passed");
     Ok(())
 }
 
@@ -84,10 +84,10 @@ fn consecutive_sleep_test() -> TestResult {
         timer::sleep(sleep_ns);
         let actual = timer::now_monotonic() - start;
 
-        debug::log_debug!("Sleep {}: target={}ns, actual={}ns", i, sleep_ns, actual);
+        log_debug!("Sleep {}: target={}ns, actual={}ns", i, sleep_ns, actual);
     }
 
-    debug::log_info!("Consecutive sleep test passed");
+    log_info!("Consecutive sleep test passed");
     Ok(())
 }
 
@@ -100,7 +100,7 @@ fn zero_sleep_test() -> TestResult {
     // Zero sleep should return immediately
     assert_lt!(elapsed, 1_000_000, "Zero sleep took too long"); // < 1ms
 
-    debug::log_info!("Zero sleep test passed");
+    log_info!("Zero sleep test passed");
     Ok(())
 }
 
@@ -115,7 +115,7 @@ fn short_sleep_test() -> TestResult {
     // Should sleep at least the requested amount
     assert_ge!(actual, SHORT_NS, "Sleep too short");
 
-    debug::log_info!("Short sleep test passed: {} ns", actual);
+    log_info!("Short sleep test passed: {} ns", actual);
     Ok(())
 }
 

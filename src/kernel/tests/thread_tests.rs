@@ -149,7 +149,7 @@ fn mutex_inheritance_test() -> TestResult {
 fn event_signal_test() -> TestResult {
     use crate::kernel::sync::Event;
 
-    let event = Arc::new(Event::new(false));
+    let event = Arc::new(Event::new(false, EventFlags::empty()));
 
     // Create signaler thread
     let event_clone = event.clone();
@@ -201,7 +201,7 @@ fn event_signal_test() -> TestResult {
 fn event_autosignal_test() -> TestResult {
     use crate::kernel::sync::Event;
 
-    let event = Arc::new(Event::new(true)); // Auto-signal
+    let event = Arc::new(Event::new(true, EventFlags::empty())); // Auto-signal
 
     let mut threads = alloc::vec::Vec::new();
 
@@ -426,7 +426,7 @@ fn thread_detach_test() -> TestResult {
 fn thread_priority_test() -> TestResult {
     use crate::kernel::sync::Event;
 
-    let event = Arc::new(Event::new(false));
+    let event = Arc::new(Event::new(false, EventFlags::empty()));
 
     // Create a thread with low priority
     let event_clone = event.clone();

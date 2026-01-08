@@ -13,6 +13,17 @@
 // We can leverage Rust's built-in intrinsics support through the core::arch module
 // which provides architecture-specific intrinsics including x86/x86_64 ones.
 
+/// Macro to check if a CPU feature is supported at runtime
+///
+/// This is a stub implementation that always returns false for now.
+/// In a real implementation, this would use CPUID to check for feature support.
+#[macro_export]
+macro_rules! is_x86_feature_detected {
+    ($feature:tt) => {
+        false
+    };
+}
+
 pub use core::arch::x86_64::*;
 
 // Note: The original header contained workarounds for GCC bugs with certain

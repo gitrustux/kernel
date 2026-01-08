@@ -448,7 +448,14 @@ extern "C" fn dpc_worker_thread(_arg: u64) -> ! {
     // Thread exit - use the exit function from current thread
     // For now, just loop forever since we can't properly exit
     loop {
+        #[cfg(target_arch = "x86_64")]
         unsafe { crate::kernel::arch::amd64::registers::x86_hlt() };
+
+        #[cfg(target_arch = "aarch64")]
+        unsafe { core::arch::asm!("wfe") }; // Wait For Event
+
+        #[cfg(target_arch = "riscv64")]
+        unsafe { core::arch::asm!("wfi") }; // Wait For Interrupt
     }
 }
 

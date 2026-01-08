@@ -233,3 +233,140 @@ pub unsafe fn get_interrupt_acknowledge() -> u32 {
 
     0 // Stub - return spurious interrupt (ID 1023)
 }
+
+// ============================================================================
+// Interrupt State Management
+// ============================================================================
+
+/// Check if IRQ interrupts are disabled
+#[inline]
+pub fn arch_ints_disabled() -> bool {
+    // Read the DAIF (Disable Interrupts) register
+    // Bit 7 (I) controls IRQ masking
+    let daif: u64;
+    unsafe {
+        core::arch::asm!("mrs {}, daif", out(reg) daif);
+    }
+    (daif & (1 << 7)) != 0
+}
+
+/// Disable IRQ interrupts
+#[inline]
+pub fn arch_disable_ints() {
+    unsafe {
+        core::arch::asm!("msr daifset, #2"); // Set IRQ bit (bit 1 in DAIFSET)
+    }
+}
+
+/// Enable IRQ interrupts
+#[inline]
+pub fn arch_enable_ints() {
+    unsafe {
+        core::arch::asm!("msr daifclr, #2"); // Clear IRQ bit (bit 1 in DAIFCLR)
+    }
+}
+
+/// Save current interrupt state and return it
+///
+/// # Returns
+///
+/// The current interrupt state as a bitmask
+#[inline]
+pub fn arch_save_ints() -> u64 {
+    let daif: u64;
+    unsafe {
+        core::arch::asm!("mrs {}, daif", out(reg) daif);
+    }
+    daif
+}
+
+/// Restore interrupt state from a previously saved value
+///
+/// # Arguments
+///
+/// * `state` - The interrupt state to restore
+#[inline]
+pub fn arch_restore_ints(state: u64) {
+    unsafe {
+        core::arch::asm!("msr daif, {}", in(reg) state);
+    }
+}
+
+/// Check if FIQ interrupts are disabled
+#[inline]
+pub fn arch_fiqs_disabled() -> bool {
+    // Read the DAIF (Disable Interrupts) register
+    // Bit 6 (F) controls FIQ masking
+    let daif: u64;
+    unsafe {
+        core::arch::asm!("mrs {}, daif", out(reg) daif);
+    }
+    (daif & (1 << 6)) != 0
+}
+
+/// Disable FIQ interrupts
+#[inline]
+pub fn arch_disable_fiqs() {
+    unsafe {
+        core::arch::asm!("msr daifset, #1"); // Set FIQ bit (bit 0 in DAIFSET)
+    }
+}
+
+/// Enable FIQ interrupts
+#[inline]
+pub fn arch_enable_fiqs() {
+    unsafe {
+        core::arch::asm!("msr daifclr, #1"); // Clear FIQ bit (bit 0 in DAIFCLR)
+    }
+}
+
+// ============================================================================
+// Interrupt Handler Support (LK Compatibility)
+// ============================================================================
+
+/// Saved state during interrupt handler (LK compatibility)
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+pub struct int_handler_saved_state_t {
+    /// Saved interrupt state flags
+    pub flags: u64,
+    /// Saved DAIF register value
+    pub daif: u64,
+}
+
+impl Default for int_handler_saved_state_t {
+    fn default() -> Self {
+        Self {
+            flags: 0,
+            daif: 0,
+        }
+    }
+}
+
+/// Start interrupt handler (save state)
+pub fn int_handler_start() -> int_handler_saved_state_t {
+    unsafe {
+        let daif: u64;
+        core::arch::asm!("mrs {}, daif", out(reg) daif);
+        int_handler_saved_state_t {
+            flags: 0,
+            daif,
+        }
+    }
+}
+
+/// Finish interrupt handler (restore state)
+pub fn int_handler_finish(_state: int_handler_saved_state_t) {
+    // TODO: Restore interrupt state if needed
+}
+
+// ============================================================================
+// Inter-Processor Interrupts (IPI)
+// ============================================================================
+
+/// Send IPI to target CPUs
+pub fn arm64_send_ipi(_target: u32, _ipi_type: u32) {
+    // TODO: Implement IPI sending via GIC
+    // This would use gic_send_sgi or similar mechanism
+}
+

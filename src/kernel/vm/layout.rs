@@ -153,6 +153,11 @@ pub mod arm64 {
         let top_bits = vaddr >> 48;
         top_bits == 0 || top_bits == 0xFFFF
     }
+
+    /// MMU ASID constants
+    pub const MMU_ARM64_ASID_BITS: u32 = 16;
+    pub const MMU_ARM64_GLOBAL_ASID: u32 = 0;
+    pub const MMU_ARM64_MAX_USER_ASID: u16 = (1 << 16) - 2;
 }
 
 /// ============================================================================

@@ -62,6 +62,7 @@ pub mod hypervisor;
 pub mod pager;
 pub mod resource;
 pub mod test;
+pub mod exception;
 pub mod profile;
 pub mod debug;
 pub mod exceptions;

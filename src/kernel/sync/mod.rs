@@ -32,3 +32,4 @@ pub mod spin;
 pub use mutex::*;
 pub use event::*;
 pub use wait_queue::*;
+pub use spin::*;

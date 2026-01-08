@@ -25,6 +25,12 @@
 #[cfg(target_arch = "aarch64")]
 pub mod arm_gic;
 
+#[cfg(target_arch = "aarch64")]
+pub mod gicv2;
+
 // Re-exports
 #[cfg(target_arch = "aarch64")]
 pub use arm_gic::*;
+
+#[cfg(target_arch = "aarch64")]
+pub use gicv2::*;

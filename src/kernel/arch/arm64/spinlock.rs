@@ -5,6 +5,7 @@
 // https://opensource.org/licenses/MIT
 
 use crate::arch::ops::arch_curr_cpu_num;
+use core::arch::asm;
 
 // We need to use unsafe code in this file since we're implementing
 // the locks themselves. The public interface will have proper safety

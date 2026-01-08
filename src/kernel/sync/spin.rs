@@ -75,3 +75,6 @@ impl<'a, T> DerefMut for SpinMutexGuard<'a, T> {
         unsafe { &mut *self.mutex.data.get() }
     }
 }
+
+/// Type alias for SpinMutex as SpinLock for compatibility
+pub type SpinLock<T> = SpinMutex<T>;

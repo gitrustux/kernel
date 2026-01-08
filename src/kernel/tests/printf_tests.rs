@@ -11,27 +11,30 @@
 #![no_std]
 
 use crate::kernel::tests::runner::*;
-use crate::debug;
+
+// Import logging macros at crate level
+use crate::{log_info, log_debug};
+
 
 /// Test integer formatting
 fn int_format_test() -> TestResult {
     // Test various integer formats
-    debug::log_info!("Integer format test:");
-    debug::log_info!("  int8: -12, 0, 127");
-    debug::log_info!("  uint8: 244, 0, 255");
-    debug::log_info!("  int: -12345678, 0, 12345678");
-    debug::log_info!("  uint: 4282621618, 0, 12345678");
+    log_info!("Integer format test:");
+    log_info!("  int8: -12, 0, 127");
+    log_info!("  uint8: 244, 0, 255");
+    log_info!("  int: -12345678, 0, 12345678");
+    log_info!("  uint: 4282621618, 0, 12345678");
 
     Ok(())
 }
 
 /// Test hexadecimal formatting
 fn hex_format_test() -> TestResult {
-    debug::log_info!("Hex format test:");
-    debug::log_info!("  uint8: f4, 0, ff");
-    debug::log_info!("  uint16: fb2e, 0, 4d2");
-    debug::log_info!("  uint: ff439eb2, 0, bc614e");
-    debug::log_info!("  uint with 0x: 0xabcdef, 0XABCDEF");
+    log_info!("Hex format test:");
+    log_info!("  uint8: f4, 0, ff");
+    log_info!("  uint16: fb2e, 0, 4d2");
+    log_info!("  uint: ff439eb2, 0, bc614e");
+    log_info!("  uint with 0x: 0xabcdef, 0XABCDEF");
 
     Ok(())
 }
@@ -39,53 +42,53 @@ fn hex_format_test() -> TestResult {
 /// Test pointer formatting
 fn pointer_format_test() -> TestResult {
     let val = 0x12345678usize;
-    debug::log_info!("Pointer format test:");
-    debug::log_info!("  pointer: {:#x}", val);
+    log_info!("Pointer format test:");
+    log_info!("  pointer: {:#x}", val);
 
     Ok(())
 }
 
 /// Test string formatting
 fn string_format_test() -> TestResult {
-    debug::log_info!("String format test:");
-    debug::log_info!("  Hello, World!");
-    debug::log_info!("  Test {}", "string");
-    debug::log_info!("  Number: {}", 42);
+    log_info!("String format test:");
+    log_info!("  Hello, World!");
+    log_info!("  Test {}", "string");
+    log_info!("  Number: {}", 42);
 
     Ok(())
 }
 
 /// Test mixed formatting
 fn mixed_format_test() -> TestResult {
-    debug::log_info!("Mixed format test:");
-    debug::log_info!("  int={}, hex={:#x}, str={}", -42, 0xabcdef, "test");
+    log_info!("Mixed format test:");
+    log_info!("  int={}, hex={:#x}, str={}", -42, 0xabcdef, "test");
 
     Ok(())
 }
 
 /// Test percent escaping
 fn percent_escape_test() -> TestResult {
-    debug::log_info!("Percent escape test:");
-    debug::log_info!("  %%");
+    log_info!("Percent escape test:");
+    log_info!("  %%");
 
     Ok(())
 }
 
 /// Test zero padding
 fn zero_pad_test() -> TestResult {
-    debug::log_info!("Zero pad test:");
-    debug::log_info!("  {:04}", 42);
-    debug::log_info!("  {:08x}", 0x123);
+    log_info!("Zero pad test:");
+    log_info!("  {:04}", 42);
+    log_info!("  {:08x}", 0x123);
 
     Ok(())
 }
 
 /// Test alignment
 fn alignment_test() -> TestResult {
-    debug::log_info!("Alignment test:");
-    debug::log_info!("  [{:>10}]", "right");
-    debug::log_info!("  [{:<10}]", "left");
-    debug::log_info!("  [{:^10}]", "center");
+    log_info!("Alignment test:");
+    log_info!("  [{:>10}]", "right");
+    log_info!("  [{:<10}]", "left");
+    log_info!("  [{:^10}]", "center");
 
     Ok(())
 }

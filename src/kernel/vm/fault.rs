@@ -418,6 +418,15 @@ pub extern "C" fn vm_page_fault_handler(addr: VAddr, flags: u32, ip: VAddr, is_u
     -1
 }
 
+/// LK-compatible alias for vm_page_fault_handler
+///
+/// This provides compatibility with LK-style calling conventions.
+/// LK uses the name vmm_page_fault_handler.
+pub fn vmm_page_fault_handler(addr: VAddr, flags: u32) -> i32 {
+    // For LK compatibility, we use a simpler signature
+    vm_page_fault_handler(addr, flags, 0, flags & 0x02 != 0)
+}
+
 /// ============================================================================
 /// Module Initialization
 /// ============================================================================

@@ -206,27 +206,39 @@ impl ArchMMU for Arm64Arch {
 
 impl ArchCache for Arm64Arch {
     unsafe fn clean_dcache(addr: VAddr, len: usize) {
-        arm64::cache::arch_clean_cache_range(addr, len);
+        // TODO: Implement cache clean operation
+        // See cache-ops.S for assembly implementation
+        let _ = addr;
+        let _ = len;
     }
 
     unsafe fn invalidate_dcache(addr: VAddr, len: usize) {
-        arm64::cache::arch_invalidate_cache_range(addr, len);
+        // TODO: Implement cache invalidate operation
+        // See cache-ops.S for assembly implementation
+        let _ = addr;
+        let _ = len;
     }
 
     unsafe fn clean_invalidate_dcache(addr: VAddr, len: usize) {
-        arm64::cache::arch_clean_invalidate_cache_range(addr, len);
+        // TODO: Implement cache clean+invalidate operation
+        // See cache-ops.S for assembly implementation
+        let _ = addr;
+        let _ = len;
     }
 
     unsafe fn sync_icache(addr: VAddr, len: usize) {
-        arm64::cache::arch_sync_cache_range(addr, len);
+        // TODO: Implement icache sync operation
+        // See cache-ops.S for assembly implementation
+        let _ = addr;
+        let _ = len;
     }
 
     fn dcache_line_size() -> usize {
-        arm64::cache::arch_dcache_line_size()
+        arm64::include::arch::arch_ops::arch_dcache_line_size() as usize
     }
 
     fn icache_line_size() -> usize {
-        arm64::cache::arch_icache_line_size()
+        arm64::include::arch::arch_ops::arch_icache_line_size() as usize
     }
 }
 
@@ -267,7 +279,6 @@ impl ArchHalt for Arm64Arch {
 
     fn serialize() {
         unsafe {
-            let mut _: u32;
             core::arch::asm!("dsb sy", options(nostack));
             core::arch::asm!("isb", options(nostack));
         }
@@ -371,3 +382,6 @@ impl ArchFpu for Arm64Arch {
 // ============= Arch Marker Trait Implementation =============
 
 impl Arch for Arm64Arch {}
+
+/// Type alias for compatibility - AArch64Arch is the same as Arm64Arch
+pub type AArch64Arch = Arm64Arch;

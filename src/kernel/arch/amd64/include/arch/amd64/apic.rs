@@ -9,8 +9,27 @@
 //! This module provides functions for interacting with both local APICs and IO APICs
 //! on x86 systems, including sending IPIs, configuring interrupts, and timer management.
 
-use crate::dev::interrupt::{InterruptPolarity, InterruptTriggerMode};
 use crate::rustux::types::*;
+
+/// Interrupt trigger mode
+#[repr(u8)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum InterruptTriggerMode {
+    /// Edge-triggered interrupt
+    Edge = 0,
+    /// Level-triggered interrupt
+    Level = 1,
+}
+
+/// Interrupt polarity
+#[repr(u8)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum InterruptPolarity {
+    /// Active high polarity
+    ActiveHigh = 0,
+    /// Active low polarity
+    ActiveLow = 1,
+}
 
 /// Represents an invalid APIC ID
 pub const INVALID_APIC_ID: u32 = 0xffffffff;
@@ -299,14 +318,14 @@ pub fn apic_io_configure_irq(
 /// `Ok((trigger_mode, polarity))` on success, or an error on failure
 pub fn apic_io_fetch_irq_config(
     global_irq: u32,
-) -> Result<(InterruptTriggerMode, InterruptPolarity), RxStatus> {
+) -> core::result::Result<(InterruptTriggerMode, InterruptPolarity), RxStatus> {
     let mut trig_mode = InterruptTriggerMode::Edge;
     let mut polarity = InterruptPolarity::ActiveHigh;
-    
+
     let status = unsafe {
         sys_apic_io_fetch_irq_config(global_irq, &mut trig_mode, &mut polarity)
     };
-    
+
     if status.is_ok() {
         Ok((trig_mode, polarity))
     } else {

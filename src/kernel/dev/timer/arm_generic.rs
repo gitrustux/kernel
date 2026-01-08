@@ -53,7 +53,7 @@
 
 #![no_std]
 
-use crate::debug;
+use crate::{log_info, log_error, log_debug};
 use core::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 
 // ============================================================================
@@ -111,7 +111,7 @@ fn read_cntp_ctl() -> u32 {
 fn write_cntp_ctl(val: u32) {
     unsafe {
         core::arch::asm!("msr cntp_ctl_el0, {0}", in(reg) val);
-        core::arch::asm!("isb" ::: "memory");
+        core::arch::asm!("isb", options(nostack));
     }
 }
 
@@ -120,7 +120,7 @@ fn write_cntp_ctl(val: u32) {
 fn write_cntp_cval(val: u64) {
     unsafe {
         core::arch::asm!("msr cntp_cval_el0, {0}", in(reg) val);
-        core::arch::asm!("isb" ::: "memory");
+        core::arch::asm!("isb", options(nostack));
     }
 }
 
@@ -129,7 +129,7 @@ fn write_cntp_cval(val: u64) {
 fn write_cntp_tval(val: i32) {
     unsafe {
         core::arch::asm!("msr cntp_tval_el0, {0}", in(reg) val);
-        core::arch::asm!("isb" ::: "memory");
+        core::arch::asm!("isb", options(nostack));
     }
 }
 
@@ -162,7 +162,7 @@ fn read_cntv_ctl() -> u32 {
 fn write_cntv_ctl(val: u32) {
     unsafe {
         core::arch::asm!("msr cntv_ctl_el0, {0}", in(reg) val);
-        core::arch::asm!("isb" ::: "memory");
+        core::arch::asm!("isb", options(nostack));
     }
 }
 
@@ -171,7 +171,7 @@ fn write_cntv_ctl(val: u32) {
 fn write_cntv_cval(val: u64) {
     unsafe {
         core::arch::asm!("msr cntv_cval_el0, {0}", in(reg) val);
-        core::arch::asm!("isb" ::: "memory");
+        core::arch::asm!("isb", options(nostack));
     }
 }
 
@@ -180,7 +180,7 @@ fn write_cntv_cval(val: u64) {
 fn write_cntv_tval(val: i32) {
     unsafe {
         core::arch::asm!("msr cntv_tval_el0, {0}", in(reg) val);
-        core::arch::asm!("isb" ::: "memory");
+        core::arch::asm!("isb", options(nostack));
     }
 }
 
@@ -203,7 +203,7 @@ fn read_cntps_ctl() -> u32 {
 fn write_cntps_ctl(val: u32) {
     unsafe {
         core::arch::asm!("msr cntps_ctl_el1, {0}", in(reg) val);
-        core::arch::asm!("isb" ::: "memory");
+        core::arch::asm!("isb", options(nostack));
     }
 }
 
@@ -212,7 +212,7 @@ fn write_cntps_ctl(val: u32) {
 fn write_cntps_cval(val: u64) {
     unsafe {
         core::arch::asm!("msr cntps_cval_el1, {0}", in(reg) val);
-        core::arch::asm!("isb" ::: "memory");
+        core::arch::asm!("isb", options(nostack));
     }
 }
 
@@ -221,7 +221,7 @@ fn write_cntps_cval(val: u64) {
 fn write_cntps_tval(val: i32) {
     unsafe {
         core::arch::asm!("msr cntps_tval_el1, {0}", in(reg) val);
-        core::arch::asm!("isb" ::: "memory");
+        core::arch::asm!("isb", options(nostack));
     }
 }
 
@@ -376,7 +376,7 @@ pub unsafe fn init(
     let ns_per_ctpct = ((ns_per_sec as u128) << 64) / (freq_u64 as u128);
     NS_PER_CTPCT.store(ns_per_ctpct as u64, Ordering::Release);
 
-    debug::log_info!("ARM Generic Timer: freq={} Hz, timer_type={:?}, irq={}",
+    log_info!("ARM Generic Timer: freq={} Hz, timer_type={:?}, irq={}",
                      freq, timer_type, irq);
 
     // TODO: Register interrupt handler
@@ -445,7 +445,7 @@ pub fn init_secondary_cpu() {
     let irq = TIMER_IRQ.load(Ordering::Acquire);
     if irq != 0 {
         // TODO: Unmask timer IRQ on this CPU
-        debug::log_debug!("ARM Generic Timer: CPU init, irq={}", irq);
+        log_debug!("ARM Generic Timer: CPU init, irq={}", irq);
     }
 }
 

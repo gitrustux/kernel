@@ -9,11 +9,14 @@ use crate::bits;
 use crate::fbl::algorithm;
 use core::sync::atomic::{AtomicU32, Ordering};
 
-// saved feature bitmap
-pub static mut arm64_features: u32 = 0;
+// Import dprintf macro (from crate root, not the function)
+use crate::dprintf;
 
-static mut cache_info: [arm64::arm64_cache_info_t; arm64::SMP_MAX_CPUS] = 
-    [arm64::arm64_cache_info_t::default(); arm64::SMP_MAX_CPUS];
+// saved feature bitmap
+pub static mut arm64_features: u64 = 0;
+
+static mut cache_info: [arm64::arm64_cache_info_t; arm64::SMP_MAX_CPUS as usize] =
+    [arm64::arm64_cache_info_t::default(); arm64::SMP_MAX_CPUS as usize];
 
 // cache size parameters cpus, default to a reasonable minimum
 pub static mut arm64_zva_size: u32 = 32;
@@ -180,13 +183,13 @@ fn print_cpu_info() {
     let aff1 = ((mpidr & arm64::MPIDR_AFF1_MASK) >> arm64::MPIDR_AFF1_SHIFT) as u32;
     let aff0 = ((mpidr & arm64::MPIDR_AFF0_MASK) >> arm64::MPIDR_AFF0_SHIFT) as u32;
     
-    dprintf!(INFO, "ARM cpu {}: midr {:#x} '{}' mpidr {:#x} aff {}:{}:{}:{}\n",
+    dprintf!(crate::kernel::debug::LogLevel::Info, "ARM cpu {}: midr {:#x} '{}' mpidr {:#x} aff {}:{}:{}:{}\n",
             arm64::arch_curr_cpu_num(), midr, core::str::from_utf8(&cpu_name).unwrap_or("unknown"), 
             mpidr, aff3, aff2, aff1, aff0);
 }
 
 // Helper function for string formatting that mimics C's snprintf
-fn snprintf(buffer: &mut [u8], format_str: &str, args: impl std::fmt::Display) -> usize {
+fn snprintf(buffer: &mut [u8], format_str: &str, args: impl core::fmt::Display) -> usize {
     use core::fmt::Write;
     
     let mut writer = WriteToSlice { slice: buffer, offset: 0 };
@@ -375,7 +378,7 @@ pub fn arm64_feature_debug(full: bool) {
         print_feature();
         
         unsafe {
-            dprintf!(INFO, "ARM cache line sizes: icache {} dcache {} zva {}\n",
+            dprintf!(crate::kernel::debug::LogLevel::Info, "ARM cache line sizes: icache {} dcache {} zva {}\n",
                     arm64_icache_size, arm64_dcache_size, arm64_zva_size);
         }
         
@@ -383,4 +386,8 @@ pub fn arm64_feature_debug(full: bool) {
             arm64_dump_cache_info(arm64::arch_curr_cpu_num());
         }
     }
+}
+/// Get ARM64 features bitmap
+pub fn arm64_get_features() -> u32 {
+    unsafe { arm64_features }
 }

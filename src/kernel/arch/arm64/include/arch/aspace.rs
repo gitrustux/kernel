@@ -5,15 +5,19 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT
 
-use crate::arch::arm64::mmu::*;
+use crate::arch::arm64::mmu::{pte_t, vaddr_t, paddr_t, size_t, MMU_ARM64_UNUSED_ASID};
+use crate::arch::arm64::mmu::{
+    RX_OK, RX_ERR_INVALID_ARGS, RX_ERR_NO_MEMORY,
+    RX_ERR_OUT_OF_RANGE, RX_ERR_INTERNAL,
+};
+use crate::rustux::types::Status as rx_status_t;
 use crate::fbl::canary::Canary;
 use crate::fbl::mutex::Mutex;
 use crate::vm::arch_vm_aspace::ArchVmAspaceInterface;
 use crate::rustux::compiler::*;
-use crate::rustux::types::*;
 
 pub struct ArmArchVmAspace {
-    canary: Canary<u32>, // Using u32 to represent the magic "VAAS"
+    canary: Canary, // Canary without generics for the magic "VAAS" value
     lock: Mutex<()>,
     asid: u16,
     
@@ -38,7 +42,7 @@ unsafe impl Send for ArmArchVmAspace {}
 impl ArmArchVmAspace {
     pub fn new() -> Self {
         Self {
-            canary: Canary::new(0x56414153), // VAAS in hex
+            canary: Canary::with_magic(0x56414153), // VAAS in hex
             lock: Mutex::new(()),
             asid: MMU_ARM64_UNUSED_ASID,
             tt_phys: 0,
@@ -48,10 +52,6 @@ impl ArmArchVmAspace {
             base: 0,
             size: 0,
         }
-    }
-
-    fn is_valid_vaddr(&self, vaddr: vaddr_t) -> bool {
-        vaddr >= self.base && vaddr <= self.base + self.size - 1
     }
 
     pub fn arch_table_phys(&self) -> paddr_t {
@@ -159,60 +159,70 @@ impl ArmArchVmAspace {
 }
 
 impl ArchVmAspaceInterface for ArmArchVmAspace {
-    fn init(&mut self, base: vaddr_t, size: usize, mmu_flags: u32) -> rx_status_t {
-        // Implementation would go here
+    fn new(_base: crate::rustux::types::VAddr, _size: usize) -> Self where Self: Sized {
+        Self::new()
+    }
+
+    fn destroy(&mut self) {
+        // Clean up resources
+        // For now, this is a stub
+    }
+
+    fn map(&mut self, _pa: crate::rustux::types::PAddr, _va: crate::rustux::types::VAddr, _flags: u64) -> crate::rustux::types::Result {
+        // Map a physical page
+        // For now, this is a stub
+        Ok(())
+    }
+
+    fn unmap(&mut self, _va: crate::rustux::types::VAddr) -> crate::rustux::types::Result {
+        // Unmap a virtual page
+        // For now, this is a stub
+        Ok(())
+    }
+
+    fn protect(&mut self, _va: crate::rustux::types::VAddr, _len: usize, _flags: u64) -> crate::rustux::types::Result {
+        // Protect a region
+        // For now, this is a stub
+        Ok(())
+    }
+}
+
+// Additional LK-style methods for ArmArchVmAspace
+impl ArmArchVmAspace {
+    pub fn destroy_lk(&mut self) -> rx_status_t {
+        // LK-style destroy that returns status
         RX_OK
     }
 
-    fn destroy(&mut self) -> rx_status_t {
-        // Implementation would go here
+    pub fn map_contiguous(&mut self, _vaddr: vaddr_t, _paddr: paddr_t, _count: usize,
+                          _mmu_flags: u32, _mapped: *mut usize) -> rx_status_t {
         RX_OK
     }
 
-    fn map(&mut self, vaddr: vaddr_t, phys: *mut paddr_t, count: usize, 
-           mmu_flags: u32, mapped: *mut usize) -> rx_status_t {
-        // Implementation would go here
+    pub fn unmap_lk(&mut self, _vaddr: vaddr_t, _count: usize, _unmapped: *mut usize) -> rx_status_t {
         RX_OK
     }
 
-    fn map_contiguous(&mut self, vaddr: vaddr_t, paddr: paddr_t, count: usize,
-                      mmu_flags: u32, mapped: *mut usize) -> rx_status_t {
-        // Implementation would go here
+    pub fn protect_lk(&mut self, _vaddr: vaddr_t, _count: usize, _mmu_flags: u32) -> rx_status_t {
         RX_OK
     }
 
-    fn unmap(&mut self, vaddr: vaddr_t, count: usize, unmapped: *mut usize) -> rx_status_t {
-        // Implementation would go here
+    pub fn query(&self, _vaddr: vaddr_t, _paddr: *mut paddr_t, _mmu_flags: *mut u32) -> rx_status_t {
         RX_OK
-    }
-
-    fn protect(&mut self, vaddr: vaddr_t, count: usize, mmu_flags: u32) -> rx_status_t {
-        // Implementation would go here
-        RX_OK
-    }
-
-    fn query(&self, vaddr: vaddr_t, paddr: *mut paddr_t, mmu_flags: *mut u32) -> rx_status_t {
-        // Implementation would go here
-        RX_OK
-    }
-
-    fn pick_spot(&self, base: vaddr_t, prev_region_mmu_flags: u32,
-                end: vaddr_t, next_region_mmu_flags: u32,
-                align: vaddr_t, size: usize, mmu_flags: u32) -> vaddr_t {
-        // Implementation would go here
-        0
-    }
-
-    fn arch_table_phys(&self) -> paddr_t {
-        self.tt_phys
     }
 }
 
 impl Drop for ArmArchVmAspace {
     fn drop(&mut self) {
         // Clean up resources when the aspace is dropped
-        let _ = self.destroy();
+        // The destroy() method doesn't return a status anymore
     }
+}
+
+/// Align address to page boundary
+#[inline]
+pub fn page_align(addr: vaddr_t) -> vaddr_t {
+    addr & !(0x1000 - 1)
 }
 
 /// Calculate the VTTBR value combining VMID and base address

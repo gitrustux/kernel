@@ -5,7 +5,7 @@
 // https://opensource.org/licenses/MIT
 
 use crate::arch::ops::*;
-use crate::dev::interrupt::*;
+use crate::kernel::dev::interrupt::*;
 use crate::err::*;
 use crate::kernel::event::*;
 use crate::platform::*;
@@ -184,8 +184,8 @@ extern "C" {
     fn __arm_rsr64(reg: &str) -> u64;
     fn arm64_write_percpu_ptr(ptr: *const Arm64Percpu);
     fn cpu_num_to_mask(cpu_num: u32) -> cpu_mask_t;
-    fn arch_curr_cpu_num() -> u32;
-    fn arch_ints_disabled() -> bool;
+    pub fn arch_curr_cpu_num() -> u32;
+    pub fn arch_ints_disabled() -> bool;
     fn smp_mb();
     fn interrupt_init_percpu();
     fn interrupt_send_ipi(mask: cpu_mask_t, ipi: u32) -> rx_status_t;
@@ -201,3 +201,31 @@ const SMP_MAX_CPUS: usize = 16;
 // Status codes
 const RX_OK: rx_status_t = 0;
 const RX_ERR_INVALID_ARGS: rx_status_t = -10;
+/// Prepare CPU for idle state
+pub fn arm64_prepare_cpu_idle(_idle: bool) {
+    // TODO: Implement CPU idle preparation
+    // May involve WFI/WFE instructions
+}
+
+/// Reschedule CPUs
+pub fn arm64_mp_reschedule(_cpu_mask: u32) {
+    // TODO: Implement reschedule IPI
+}
+
+/// Hotplug CPU
+pub fn arm64_mp_cpu_hotplug(_cpu_id: u32) -> i32 {
+    // TODO: Implement CPU hotplug
+    0
+}
+
+/// Unplug CPU
+pub fn arm64_mp_cpu_unplug(_cpu_id: u32) -> i32 {
+    // TODO: Implement CPU unplug
+    0
+}
+
+/// Get CPU count
+pub fn arm64_cpu_count() -> u32 {
+    // TODO: Implement actual CPU count detection
+    1
+}

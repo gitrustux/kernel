@@ -6,17 +6,45 @@
 
 use crate::arch::arm64::el2_state::{El2State};
 use crate::fbl::{RefPtr, Mutex};
-use crate::hypervisor::{
-    guest_physical_address_space::GuestPhysicalAddressSpace,
-    id_allocator::IdAllocator,
-    interrupt_tracker::InterruptTracker,
-    page::Page,
-    trap_map::TrapMap,
+// Import from kernel::hypervisor module
+use crate::kernel::hypervisor::{
+    GuestPhysicalAddressSpace,
+    InterruptTracker,
+    TrapMap,
+    IdAllocator,
 };
 use crate::kernel::{event, spinlock::*};
-use crate::ktl::unique_ptr::UniquePtr;
-use crate::bitmap::{RawBitmapGeneric, FixedStorage};
+// TODO: ktl and bitmap modules don't exist yet - comment out for now
+// use crate::ktl::unique_ptr::UniquePtr;
+// use crate::bitmap::{RawBitmapGeneric, FixedStorage};
 use crate::rustux::types::*;
+use crate::rustux::types::err::*;
+use crate::rustux::types::VAddr as rx_vaddr_t;
+use crate::rustux::types::PAddr as paddr_t;
+use crate::kernel::thread::Thread;
+
+// Stub UniquePtr for ktl compatibility
+pub struct UniquePtr<T> {
+    _phantom: core::marker::PhantomData<T>,
+}
+
+impl<T> UniquePtr<T> {
+    pub fn null() -> Self {
+        Self { _phantom: core::marker::PhantomData }
+    }
+}
+
+// Stub RawBitmapGeneric for bitmap compatibility
+pub struct RawBitmapGeneric<S> {
+    _phantom: core::marker::PhantomData<S>,
+}
+
+// Stub FixedStorage for bitmap compatibility
+pub struct FixedStorage<const N: usize>;
+
+// Stub Page type for VM compatibility
+#[derive(Default)]
+pub struct Page;
 
 // See CoreLink GIC-400, Section 2.3.2 PPIs.
 pub const MAINTENANCE_VECTOR: u32 = 25;
@@ -180,7 +208,7 @@ impl core::ops::DerefMut for El2StatePtr {
 pub struct Vcpu {
     guest: *mut Guest,
     vpid: u8,
-    thread: *const crate::thread::Thread, // Assuming thread_t maps to Thread in Rust
+    thread: *const crate::kernel::thread::Thread, // Assuming thread_t maps to Thread in Rust
     running: core::sync::atomic::AtomicBool,
     gich_state: GichState,
     el2_state: El2StatePtr,
@@ -224,7 +252,7 @@ impl Vcpu {
     }
     
     // Private constructor
-    fn new(guest: *mut Guest, vpid: u8, thread: *const crate::thread::Thread) -> Self {
+    fn new(guest: *mut Guest, vpid: u8, thread: *const crate::kernel::thread::Thread) -> Self {
         Self {
             guest,
             vpid,

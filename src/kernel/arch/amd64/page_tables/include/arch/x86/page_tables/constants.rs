@@ -99,3 +99,27 @@ pub fn vaddr_to_pd_index(vaddr: usize) -> usize {
 pub fn vaddr_to_pt_index(vaddr: usize) -> usize {
     (vaddr >> PT_SHIFT) & ((1 << ADDR_OFFSET) - 1)
 }
+
+// Architecture-specific kernel constants
+pub const KERNEL_BASE: u64 = 0xFFFF_8000_0000_0000;
+pub const KERNEL_LOAD_OFFSET: u64 = 0;
+pub const PHYSMAP_BASE: u64 = 0xFFFF_8800_0000_0000;
+
+// PAT (Page Attribute Table) selector functions
+/// Get PTE PAT selector value for a given PAT index
+#[inline]
+pub const fn x86_pat_pte_selector(pat_index: u64) -> u64 {
+    ((pat_index & 0x4) * X86_MMU_PG_PTE_PAT) | common_selector!(pat_index)
+}
+
+/// Get LARGE page PAT selector value for a given PAT index
+#[inline]
+pub const fn x86_pat_large_selector(pat_index: u64) -> u64 {
+    ((pat_index & 0x4) * X86_MMU_PG_LARGE_PAT) | common_selector!(pat_index)
+}
+
+/// Compatibility alias for PTE selector
+pub use x86_pat_pte_selector as X86_PAT_PTE_SELECTOR;
+
+/// Compatibility alias for LARGE selector
+pub use x86_pat_large_selector as X86_PAT_LARGE_SELECTOR;

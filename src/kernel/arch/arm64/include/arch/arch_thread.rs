@@ -9,6 +9,8 @@ pub const CURRENT_PERCPU_PTR_OFFSET: usize = 16;
 
 use core::assert_eq;
 use crate::arch::arm64::registers::*;
+use crate::arch::arm64::include::arch::arm64::arm64_iframe_long;
+use crate::arch::arm64::{arm64_percpu, arm64_debug_state_t};
 use core::mem::offset_of;
 use crate::sys::types::*;
 use crate::rustux::compiler::*;

@@ -10,8 +10,11 @@
 //! processors, primarily used for SMP initialization and suspend/resume support.
 
 use crate::arch::amd64::mmu::*;
-use crate::vm::vm_aspace::VmAspace;
+use crate::kernel::vm::layout::PAGE_SIZE;
+use crate::kernel::vm::VmAspace;
 use crate::rustux::types::*;
+use crate::SMP_MAX_CPUS;
+use crate::kernel::thread::Thread;
 use core::sync::atomic::AtomicI32;
 use alloc::sync::Arc;
 
@@ -88,7 +91,7 @@ pub struct X86ApBootstrapData {
     pub cpu_waiting_mask: *const AtomicI32,
 
     /// Per-cpu data for each AP
-    pub per_cpu: [X86ApPerCpuData; SMP_MAX_CPUS - 1],
+    pub per_cpu: [X86ApPerCpuData; (SMP_MAX_CPUS - 1) as usize],
 }
 
 /// Per-CPU data for each AP during bootstrap
@@ -153,8 +156,12 @@ pub unsafe fn x86_bootstrap16_init(bootstrap_base: PAddr) {
 /// with the bootstrap resources.
 pub unsafe fn x86_bootstrap16_acquire(
     entry64: usize,
-) -> Result<(Arc<VmAspace>, *mut core::ffi::c_void, PAddr), RxStatus> {
-    let mut temp_aspace: Arc<VmAspace> = Arc::new(VmAspace::new()); // Placeholder, will be replaced by FFI
+) -> core::result::Result<(Arc<VmAspace>, *mut core::ffi::c_void, PAddr), RxStatus> {
+    let mut temp_aspace: Arc<VmAspace> = Arc::new(VmAspace::new(
+        crate::kernel::vm::aspace::AddressSpaceFlags::None,
+        0,
+        0,
+    ).unwrap()); // Placeholder, will be replaced by FFI
     let mut bootstrap_aperture: *mut core::ffi::c_void = core::ptr::null_mut();
     let mut instr_ptr: PAddr = 0;
 

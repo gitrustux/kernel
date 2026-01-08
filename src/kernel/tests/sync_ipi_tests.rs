@@ -240,7 +240,7 @@ fn ipi_timer_sync_test() -> TestResult {
     debug::log_info!("IPI timer sync test");
 
     let counter = AtomicUsize::new(0);
-    let event = sync::Event::new(false);
+    let event = sync::Event::new(false, EventFlags::empty());
 
     // Create a timer that will signal the event
     let _timer = crate::kernel::timer::Timer::new(

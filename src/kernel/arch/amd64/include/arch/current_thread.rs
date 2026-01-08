@@ -65,6 +65,78 @@ pub unsafe fn set_current_thread(thread: *mut Thread) {
 
 // Foreign function declarations for accessing the GS segment
 extern "C" {
-    fn x86_read_gs_offset64(offset: u32) -> u64;
-    fn x86_write_gs_offset64(offset: u32, value: u64);
+    #[link_name = "x86_read_gs_offset64"]
+    fn sys_x86_read_gs_offset64(offset: u32) -> u64;
+    #[link_name = "x86_write_gs_offset64"]
+    fn sys_x86_write_gs_offset64(offset: u32, value: u64);
+    #[link_name = "x86_read_gs_offset32"]
+    fn sys_x86_read_gs_offset32(offset: u32) -> u32;
+    #[link_name = "x86_write_gs_offset32"]
+    fn sys_x86_write_gs_offset32(offset: u32, value: u32);
+}
+
+/// Read a 32-bit value from the GS segment at the specified offset
+///
+/// # Arguments
+///
+/// * `offset` - Offset into the GS segment
+///
+/// # Returns
+///
+/// The 32-bit value at the specified offset
+///
+/// # Safety
+///
+/// This function is unsafe because it performs an untyped read from the GS segment.
+#[inline]
+pub unsafe fn x86_read_gs_offset32(offset: u32) -> u32 {
+    sys_x86_read_gs_offset32(offset)
+}
+
+/// Write a 32-bit value to the GS segment at the specified offset
+///
+/// # Arguments
+///
+/// * `offset` - Offset into the GS segment
+/// * `value` - Value to write
+///
+/// # Safety
+///
+/// This function is unsafe because it performs an untyped write to the GS segment.
+#[inline]
+pub unsafe fn x86_write_gs_offset32(offset: u32, value: u32) {
+    sys_x86_write_gs_offset32(offset, value)
+}
+
+/// Read a 64-bit value from the GS segment at the specified offset
+///
+/// # Arguments
+///
+/// * `offset` - Offset into the GS segment
+///
+/// # Returns
+///
+/// The 64-bit value at the specified offset
+///
+/// # Safety
+///
+/// This function is unsafe because it performs an untyped read from the GS segment.
+#[inline]
+pub unsafe fn x86_read_gs_offset64(offset: u32) -> u64 {
+    sys_x86_read_gs_offset64(offset)
+}
+
+/// Write a 64-bit value to the GS segment at the specified offset
+///
+/// # Arguments
+///
+/// * `offset` - Offset into the GS segment
+/// * `value` - Value to write
+///
+/// # Safety
+///
+/// This function is unsafe because it performs an untyped write to the GS segment.
+#[inline]
+pub unsafe fn x86_write_gs_offset64(offset: u32, value: u64) {
+    sys_x86_write_gs_offset64(offset, value)
 }

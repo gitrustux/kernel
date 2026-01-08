@@ -338,7 +338,7 @@ fn timer_all_cpus_test() -> TestResult {
         test_skip!("Requires at least 2 CPUs");
     }
 
-    let event = Arc::new(Event::new(false));
+    let event = Arc::new(Event::new(false, EventFlags::empty()));
 
     // Create timer threads on each CPU
     let mut threads = alloc::vec::Vec::new();
@@ -403,7 +403,7 @@ fn timer_far_deadline_test() -> TestResult {
     use crate::kernel::timer::Timer;
     use crate::kernel::sync::Event;
 
-    let event = Arc::new(Event::new(false));
+    let event = Arc::new(Event::new(false, EventFlags::empty()));
 
     // Set a timer far in the future
     let timer = Timer::new(

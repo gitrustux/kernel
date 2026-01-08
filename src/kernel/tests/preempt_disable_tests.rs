@@ -41,7 +41,7 @@ fn timer_callback_preempt_test() -> TestResult {
     use crate::kernel::sync::Event;
     use alloc::sync::Arc;
 
-    let event = Arc::new(Event::new(false));
+    let event = Arc::new(Event::new(false, EventFlags::empty()));
     let event_clone = event.clone();
 
     // Set a timer that fires immediately
@@ -122,7 +122,7 @@ fn preempt_pending_test() -> TestResult {
 fn blocking_preempt_disabled_test() -> TestResult {
     use crate::kernel::sync::Event;
 
-    let event = Event::new(false);
+    let event = Event::new(false, EventFlags::empty());
 
     // Signal before waiting
     event.signal();

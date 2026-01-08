@@ -16,11 +16,15 @@ use crate::bits;
 use crate::debug;
 use crate::kernel::cmdline;
 use crate::kernel::thread::{self, Thread};
+use crate::kernel::mp::SMP_MAX_CPUS;
 use crate::lk::init;
+use crate::sys::types::addr_t;
 use crate::lk::main;
 use crate::platform;
 use crate::rustux::errors::*;
 use crate::rustux::types::*;
+use crate::rustux::types::err::*;
+use crate::rustux::tls::{RX_TLS_STACK_GUARD_OFFSET, RX_TLS_UNSAFE_SP_OFFSET};
 use crate::trace::*;
 
 // Counter-timer Kernel Control Register, EL1.
@@ -51,6 +55,7 @@ const SCTLR_EL1_SA: u64 = 1 << 3;   // Enable Stack Alignment Check EL1.
 const SCTLR_EL1_AC: u64 = 1 << 1;   // Enable Alignment Checking for EL1 EL0.
 
 #[repr(C)]
+#[derive(Copy, Clone)]
 pub struct Arm64SpInfo {
     mpid: u64,
     sp: *mut core::ffi::c_void,
@@ -83,15 +88,17 @@ const _: () = assert!(tp_offset!(stack_guard) == RX_TLS_STACK_GUARD_OFFSET, "");
 const _: () = assert!(tp_offset!(unsafe_sp) == RX_TLS_UNSAFE_SP_OFFSET, "");
 
 // SMP boot lock
-static ARM_BOOT_CPU_LOCK: crate::arch::spinlock::SpinLock = crate::arch::spinlock::SpinLock::new();
+static ARM_BOOT_CPU_LOCK: crate::arch::arm64::spinlock::SpinLock<()> = crate::arch::arm64::spinlock::SpinLock::new(());
 static mut SECONDARIES_TO_INIT: i32 = 0;
 
 // One for each secondary CPU, indexed by (cpu_num - 1)
-static mut INIT_THREAD: [Thread; SMP_MAX_CPUS - 1] = [Thread::new(); SMP_MAX_CPUS - 1];
+// Using MaybeUninit because Thread doesn't implement Copy
+static mut INIT_THREAD: [core::mem::MaybeUninit<Thread>; (SMP_MAX_CPUS - 1) as usize] =
+    [core::mem::MaybeUninit::<Thread>::uninit(); (SMP_MAX_CPUS - 1) as usize];
 
 // One for each CPU
-pub static mut ARM64_SECONDARY_SP_LIST: [Arm64SpInfo; SMP_MAX_CPUS] = 
-    [Arm64SpInfo { mpid: 0, sp: core::ptr::null_mut(), stack_guard: 0, unsafe_sp: core::ptr::null_mut() }; SMP_MAX_CPUS];
+pub static mut ARM64_SECONDARY_SP_LIST: [Arm64SpInfo; SMP_MAX_CPUS as usize] =
+    [Arm64SpInfo { mpid: 0, sp: core::ptr::null_mut(), stack_guard: 0, unsafe_sp: core::ptr::null_mut() }; SMP_MAX_CPUS as usize];
 
 // Defined in start.S
 extern "C" {
@@ -108,7 +115,8 @@ pub fn arm64_create_secondary_stack(cluster: u32, cpu: u32) -> rx_status_t {
     debug_assert!(cpu_num > 0 && cpu_num < SMP_MAX_CPUS as u32);
     
     unsafe {
-        let stack = &mut INIT_THREAD[cpu_num as usize - 1].stack;
+        let thread = INIT_THREAD[cpu_num as usize - 1].assume_init_mut();
+        let stack = &mut thread.stack;
         debug_assert!(stack.base == 0);
         
         let status = vm_allocate_kstack(stack);
@@ -127,12 +135,12 @@ pub fn arm64_create_secondary_stack(cluster: u32, cpu: u32) -> rx_status_t {
         }
 
         // Find an empty slot for the low-level stack info.
-        let mut i = 0;
-        while i < SMP_MAX_CPUS && ARM64_SECONDARY_SP_LIST[i].mpid != 0 {
+        let mut i: usize = 0;
+        while i < SMP_MAX_CPUS as usize && ARM64_SECONDARY_SP_LIST[i].mpid != 0 {
             i += 1;
         }
-        
-        if i == SMP_MAX_CPUS {
+
+        if i == SMP_MAX_CPUS as usize {
             return RX_ERR_NO_RESOURCES;
         }
 
@@ -142,10 +150,14 @@ pub fn arm64_create_secondary_stack(cluster: u32, cpu: u32) -> rx_status_t {
         
         #[cfg(feature = "safe_stack")]
         ltrace!("set mpid 0x{:x} unsafe-sp to {:p}", mpid, unsafe_sp);
-        
+
         ARM64_SECONDARY_SP_LIST[i].mpid = mpid;
         ARM64_SECONDARY_SP_LIST[i].sp = sp;
-        ARM64_SECONDARY_SP_LIST[i].stack_guard = thread::get_current_thread().arch.stack_guard;
+        ARM64_SECONDARY_SP_LIST[i].stack_guard = if let Some(ct) = thread::get_current_thread() {
+            ct.arch.stack_guard
+        } else {
+            0
+        };
         ARM64_SECONDARY_SP_LIST[i].unsafe_sp = unsafe_sp;
     }
 
@@ -155,9 +167,10 @@ pub fn arm64_create_secondary_stack(cluster: u32, cpu: u32) -> rx_status_t {
 pub fn arm64_free_secondary_stack(cluster: u32, cpu: u32) -> rx_status_t {
     let cpu_num = mp::arch_mpid_to_cpu_num(cluster, cpu);
     debug_assert!(cpu_num > 0 && cpu_num < SMP_MAX_CPUS as u32);
-    
+
     unsafe {
-        let stack = &mut INIT_THREAD[cpu_num as usize - 1].stack;
+        let thread = INIT_THREAD[cpu_num as usize - 1].assume_init_mut();
+        let stack = &mut thread.stack;
         vm_free_kstack(stack)
     }
 }
@@ -258,7 +271,7 @@ fn arm64_cpu_early_init() {
         );
     }
 
-    arch::arch_enable_fiqs();
+    crate::arch::arm64::interrupts::arch_enable_fiqs();
 }
 
 pub fn arch_early_init() {
@@ -295,9 +308,9 @@ pub fn arch_init() {
 
     // Flush the release of the lock, since the secondary cpus are running without cache on.
     unsafe {
-        arch::arch_clean_cache_range(
+        crate::arch::arm64::include::arch::arch_ops::arch_clean_cache_range(
             &ARM_BOOT_CPU_LOCK as *const _ as addr_t,
-            core::mem::size_of::<crate::arch::spinlock::SpinLock>()
+            core::mem::size_of::<crate::arch::arm64::spinlock::SpinLock>()
         );
     }
 }
@@ -313,6 +326,20 @@ pub extern "C" fn arch_idle_thread_routine(_arg: *mut core::ffi::c_void) -> i32 
 // the top of the kernel stack.
 pub fn arch_enter_uspace(pc: usize, sp: usize, arg1: usize, arg2: usize) {
     let ct = thread::get_current_thread();
+    let stack_top = unsafe {
+        // Lock the stack mutex to access the top
+        if let Some(thread) = ct {
+            let stack_guard = thread.stack.lock();
+            if let Some(ref stack) = *stack_guard {
+                stack.top
+            } else {
+                // Fallback if no stack is allocated
+                sp
+            }
+        } else {
+            sp
+        }
+    };
 
     // Set up a default spsr to get into 64bit user space:
     //  - Zeroed NZCV.
@@ -324,23 +351,23 @@ pub fn arch_enter_uspace(pc: usize, sp: usize, arg1: usize, arg2: usize) {
     //         SError exception when first switching to uspace.
     let spsr: u32 = 1 << 8;  // Mask SError exceptions (currently unhandled).
 
-    arch::arch_disable_ints();
+    crate::arch::arm64::interrupts::arch_disable_ints();
 
     ltrace!("arm_uspace_entry({:#x}, {:#x}, {:#x}, {:#x}, {:#x}, 0, {:#x})\n",
-           arg1, arg2, spsr, ct.stack.top, sp, pc);
-           
+           arg1, arg2, spsr, stack_top, sp, pc);
+
     unsafe {
         arm64::arm64_uspace_entry(
-            arg1 as u64, 
-            arg2 as u64, 
-            pc as u64, 
-            sp as u64, 
-            ct.stack.top as u64, 
-            spsr, 
+            arg1 as u64,
+            arg2 as u64,
+            pc as u64,
+            sp as u64,
+            stack_top as u64,
+            spsr,
             MSDCR_EL1_INITIAL_VALUE
         );
     }
-    
+
     unreachable!();
 }
 
@@ -356,7 +383,8 @@ pub extern "C" fn arm64_secondary_entry() {
     let cpu = mp::arch_curr_cpu_num();
     
     unsafe {
-        thread::thread_secondary_cpu_init_early(&mut INIT_THREAD[cpu as usize - 1]);
+        let thread = INIT_THREAD[cpu as usize - 1].assume_init_mut();
+        thread::thread_secondary_cpu_init_early(thread);
         
         // Run early secondary cpu init routines up to the threading level.
         init::lk_init_level(

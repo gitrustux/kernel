@@ -21,7 +21,16 @@
 #![no_std]
 
 use crate::kernel::vm::layout::*;
-use crate::kernel::vm::layout::amd64 as layout_amd64;
+
+// Architecture-specific layout imports
+#[cfg(target_arch = "x86_64")]
+use crate::kernel::vm::layout::amd64 as layout_arch;
+
+#[cfg(target_arch = "aarch64")]
+use crate::kernel::vm::layout::arm64 as layout_arch;
+
+#[cfg(target_arch = "riscv64")]
+use crate::kernel::vm::layout::riscv as layout_arch;
 use crate::kernel::vm::page_table::*;
 use crate::kernel::vm::aspace::*;
 use crate::kernel::vm::{Result, VmError};
@@ -199,13 +208,13 @@ fn map_kernel_region(aspace: &AddressSpace, desc: KernelMapDesc) -> Result {
 /// Setup per-CPU data areas
 fn setup_percpu_areas(aspace: &AddressSpace) -> Result {
     #[cfg(target_arch = "aarch64")]
-    let (base, size) = (layout_amd64::KERNEL_PERCPU_BASE, layout_amd64::KERNEL_PERCPU_SIZE);
+    let (base, size) = (layout_arch::KERNEL_PERCPU_BASE, layout_arch::KERNEL_PERCPU_SIZE);
 
     #[cfg(target_arch = "x86_64")]
-    let (base, size) = (layout_amd64::KERNEL_PERCPU_BASE, layout_amd64::KERNEL_PERCPU_SIZE);
+    let (base, size) = (layout_arch::KERNEL_PERCPU_BASE, layout_arch::KERNEL_PERCPU_SIZE);
 
     #[cfg(target_arch = "riscv64")]
-    let (base, size) = (layout_amd64::KERNEL_PERCPU_BASE, layout_amd64::KERNEL_PERCPU_SIZE);
+    let (base, size) = (layout_arch::KERNEL_PERCPU_BASE, layout_arch::KERNEL_PERCPU_SIZE);
 
     // For now, map a single per-CPU area
     // In multi-CPU systems, we'd allocate one area per CPU
@@ -228,13 +237,13 @@ fn setup_kernel_stacks(aspace: &AddressSpace) -> Result {
     const STACK_REGION_SIZE: usize = MAX_KERNEL_STACKS * KERNEL_STACK_SIZE;
 
     #[cfg(target_arch = "aarch64")]
-    let stacks_base = layout_amd64::KERNEL_HEAP_BASE + layout_amd64::KERNEL_HEAP_SIZE;
+    let stacks_base = layout_arch::KERNEL_HEAP_BASE + layout_arch::KERNEL_HEAP_SIZE;
 
     #[cfg(target_arch = "x86_64")]
-    let stacks_base = layout_amd64::KERNEL_HEAP_BASE + layout_amd64::KERNEL_HEAP_SIZE;
+    let stacks_base = layout_arch::KERNEL_HEAP_BASE + layout_arch::KERNEL_HEAP_SIZE;
 
     #[cfg(target_arch = "riscv64")]
-    let stacks_base = layout_amd64::KERNEL_HEAP_BASE + layout_amd64::KERNEL_HEAP_SIZE;
+    let stacks_base = layout_arch::KERNEL_HEAP_BASE + layout_arch::KERNEL_HEAP_SIZE;
 
     // Allocate physical pages for stacks
     let total_pages = STACK_REGION_SIZE / PAGE_SIZE;
@@ -260,13 +269,13 @@ fn setup_kernel_stacks(aspace: &AddressSpace) -> Result {
 /// Setup physical memory direct map
 fn setup_physmap(aspace: &AddressSpace) -> Result {
     #[cfg(target_arch = "aarch64")]
-    let (base, size) = (layout_amd64::KERNEL_PHYSMAP_BASE, layout_amd64::KERNEL_PHYSMAP_SIZE);
+    let (base, size) = (layout_arch::KERNEL_PHYSMAP_BASE, layout_arch::KERNEL_PHYSMAP_SIZE);
 
     #[cfg(target_arch = "x86_64")]
-    let (base, size) = (layout_amd64::KERNEL_PHYSMAP_BASE, layout_amd64::KERNEL_PHYSMAP_SIZE);
+    let (base, size) = (layout_arch::KERNEL_PHYSMAP_BASE, layout_arch::KERNEL_PHYSMAP_SIZE);
 
     #[cfg(target_arch = "riscv64")]
-    let (base, size) = (layout_amd64::KERNEL_PHYSMAP_BASE, layout_amd64::KERNEL_PHYSMAP_SIZE);
+    let (base, size) = (layout_arch::KERNEL_PHYSMAP_BASE, layout_arch::KERNEL_PHYSMAP_SIZE);
 
     // Map the first portion of physical memory 1:1
     let map_size = size.min(1 * 1024 * 1024 * 1024); // Start with 1GB
@@ -288,13 +297,13 @@ fn setup_physmap(aspace: &AddressSpace) -> Result {
 /// Setup device MMIO region
 fn setup_mmio_region(aspace: &AddressSpace) -> Result {
     #[cfg(target_arch = "aarch64")]
-    let (base, size) = (layout_amd64::KERNEL_MMIO_BASE, layout_amd64::KERNEL_MMIO_SIZE);
+    let (base, size) = (layout_arch::KERNEL_MMIO_BASE, layout_arch::KERNEL_MMIO_SIZE);
 
     #[cfg(target_arch = "x86_64")]
-    let (base, size) = (layout_amd64::KERNEL_MMIO_BASE, layout_amd64::KERNEL_MMIO_SIZE);
+    let (base, size) = (layout_arch::KERNEL_MMIO_BASE, layout_arch::KERNEL_MMIO_SIZE);
 
     #[cfg(target_arch = "riscv64")]
-    let (base, size) = (layout_amd64::KERNEL_MMIO_BASE, layout_amd64::KERNEL_MMIO_SIZE);
+    let (base, size) = (layout_arch::KERNEL_MMIO_BASE, layout_arch::KERNEL_MMIO_SIZE);
 
     // Map a small region for early MMIO (e.g., UART)
     let map_size = 64 * 1024 * 1024; // 64MB
@@ -381,7 +390,7 @@ fn kernel_memory_regions() -> [KernelMapDesc; 3] {
 pub unsafe extern "C" fn boot_create_page_tables() -> PAddr {
     #[cfg(target_arch = "aarch64")]
     {
-        crate::arch::amd64::boot_mmu::arm64_boot_create_page_tables()
+        crate::kernel::arch::arm64::boot_mmu::arm64_boot_create_page_tables()
     }
 
     #[cfg(target_arch = "x86_64")]
@@ -392,7 +401,7 @@ pub unsafe extern "C" fn boot_create_page_tables() -> PAddr {
 
     #[cfg(target_arch = "riscv64")]
     {
-        crate::arch::riscv64::boot_mmu::riscv_boot_create_page_tables()
+        crate::kernel::arch::riscv64::boot_mmu::riscv_boot_create_page_tables()
     }
 }
 
@@ -415,7 +424,7 @@ pub fn finalize_kernel_aspace() -> Result {
         #[cfg(target_arch = "aarch64")]
         {
             let root = aspace.root_phys();
-            crate::arch::amd64::mmu::set_ttbr1_el1(root);
+            crate::kernel::arch::arm64::mmu::set_ttbr1_el1(root);
         }
 
         #[cfg(target_arch = "x86_64")]

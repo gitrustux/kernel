@@ -6,7 +6,7 @@
 
 //! ACPI interface definitions for the Rustux microkernel
 
-use crate::arch::amd64::bootstrap16::X86RealModeEntryDataRegisters;
+use crate::kernel::arch::amd64::include::arch::amd64::bootstrap16::X86RealModeEntryDataRegisters;
 
 /// ACPI status code type imported from the ACPICA library
 pub type AcpiStatus = i32; // Assuming this is the correct type from ACPICA

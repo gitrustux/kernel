@@ -636,6 +636,50 @@ pub fn init() {
 }
 
 // ============================================================================
+// Architecture-Specific Functions (Stubs)
+// ============================================================================
+
+/// Initialize per-CPU MP state
+pub fn arch_mp_init_percpu() {
+    // TODO: Implement per-CPU MP initialization
+}
+
+/// Convert MPID to CPU number
+pub fn arch_mpid_to_cpu_num(_mpid: u64) -> u32 {
+    // TODO: Implement MPID to CPU number conversion
+    0
+}
+
+/// Get maximum number of CPUs
+pub fn arch_max_num_cpus() -> u32 {
+    SMP_MAX_CPUS
+}
+
+/// Get current CPU number (architecture-specific)
+#[inline]
+pub fn arch_curr_cpu_num() -> u32 {
+    #[cfg(target_arch = "aarch64")]
+    unsafe {
+        let mut cpu_num: u32;
+        core::arch::asm!("mrs {}, tpidr_el1", out(reg) cpu_num);
+        // Extract CPU number from per-CPU pointer
+        cpu_num & 0xFF
+    }
+
+    #[cfg(target_arch = "x86_64")]
+    {
+        // TODO: Implement for x86_64
+        0
+    }
+
+    #[cfg(target_arch = "riscv64")]
+    {
+        // TODO: Implement for RISC-V
+        0
+    }
+}
+
+// ============================================================================
 // Tests
 // ============================================================================
 

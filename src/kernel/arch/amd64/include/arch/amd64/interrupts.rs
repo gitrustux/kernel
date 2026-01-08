@@ -64,8 +64,9 @@ pub enum X86InterruptVector {
     /// Maximum platform-specific interrupt
     PlatformMax = 0xef,
 
-    /// Base for local APIC interrupts
-    LocalApicBase = 0xf0,
+    /// Base for local APIC interrupts (not a valid interrupt, just a marker)
+    // Note: LocalApicBase value conflicts with ApicSpurious, removed for now
+    // LocalApicBase = 0xf0,
     /// APIC spurious interrupt
     ApicSpurious = 0xf0,
     /// APIC timer interrupt
@@ -128,7 +129,7 @@ impl X86InterruptVector {
     /// Check if this is a local APIC interrupt vector
     pub fn is_apic_interrupt(self) -> bool {
         let raw = self as u8;
-        raw >= Self::LocalApicBase as u8
+        raw >= Self::ApicSpurious as u8
     }
 
     /// Check if this is an inter-processor interrupt (IPI)

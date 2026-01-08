@@ -25,6 +25,7 @@ pub mod debugger;
 pub mod descriptor;
 pub mod faults;
 pub mod feature;
+pub mod idt;
 pub mod interrupts;
 pub mod ioport;
 pub mod mmu;
@@ -42,24 +43,8 @@ pub mod uspace_entry;
 // pub mod hypervisor;  // TODO: Implement hypervisor module
 
 // Include directory contains public API re-exports
-pub mod include {
-    pub mod arch {
-        pub mod amd64 {
-            // These are re-exports from the include directory
-            // Note: Can't glob import from here due to circular dependency
-            // pub use crate::kernel::arch::amd64::include::arch::amd64::*;
-        }
-
-        pub mod arch_ops;
-        pub mod arch_thread;
-        pub mod aspace;
-        pub mod spinlock;
-        pub mod current_thread;
-        pub mod defines;
-        // pub mod asm_macros;  // Assembly macros, not Rust code
-        pub mod hypervisor;
-    }
-}
+// These are file-based modules in the include/ directory
+pub mod include;
 
 // Re-export commonly used items
 pub use aal::Amd64Arch;

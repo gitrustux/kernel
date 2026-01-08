@@ -13,6 +13,16 @@ use core::sync::atomic::AtomicBool;
 use crate::arch::amd64;
 use crate::rustux::compiler::*;
 
+// External static variables from C code (declared as pub for access across modules)
+extern "C" {
+    /// CPU vendor information from C code
+    pub static X86_VENDOR_STATIC: X86VendorList;
+    /// CPU microarchitecture information from C code
+    pub static X86_MICROARCH_STATIC: X86MicroarchList;
+    /// CPU hypervisor information from C code
+    pub static X86_HYPERVISOR_STATIC: X86HypervisorList;
+}
+
 /// Maximum supported standard CPUID leaf
 pub const MAX_SUPPORTED_CPUID: u32 = 0x17;
 /// Maximum supported hypervisor CPUID leaf
@@ -34,50 +44,66 @@ pub struct CpuidLeaf {
     pub d: u32,
 }
 
-/// CPUID leaf numbers
-#[repr(u32)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum X86CpuidLeafNum {
+/// CPUID leaf numbers - using struct with constants instead of enum
+/// to avoid enum discriminant overflow issues with values like 0x80000001
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+pub struct X86CpuidLeafNum {
+    pub value: u32,
+}
+
+impl X86CpuidLeafNum {
     /// Base leaf
-    Base = 0,
+    pub const Base: u32 = 0;
     /// Model features leaf
-    ModelFeatures = 0x1,
+    pub const ModelFeatures: u32 = 0x1;
     /// Cache info v1 leaf
-    CacheV1 = 0x2,
+    pub const CacheV1: u32 = 0x2;
     /// Cache info v2 leaf
-    CacheV2 = 0x4,
+    pub const CacheV2: u32 = 0x4;
     /// Monitor leaf
-    Mon = 0x5,
+    pub const Mon: u32 = 0x5;
     /// Thermal and power leaf
-    ThermalAndPower = 0x6,
+    pub const ThermalAndPower: u32 = 0x6;
     /// Extended feature flags leaf
-    ExtendedFeatureFlags = 0x7,
+    pub const ExtendedFeatureFlags: u32 = 0x7;
     /// Performance monitoring leaf
-    PerformanceMonitoring = 0xa,
+    pub const PerformanceMonitoring: u32 = 0xa;
     /// Topology leaf
-    Topology = 0xb,
+    pub const Topology: u32 = 0xb;
     /// XSAVE leaf
-    Xsave = 0xd,
+    pub const Xsave: u32 = 0xd;
     /// PT leaf
-    Pt = 0x14,
+    pub const Pt: u32 = 0x14;
     /// TSC leaf
-    Tsc = 0x15,
-
+    pub const Tsc: u32 = 0x15;
     /// Hypervisor base leaf
-    HypBase = 0x40000000,
+    pub const HypBase: u32 = 0x40000000;
     /// Hypervisor vendor leaf
-    HypVendor = 0x40000000,
+    pub const HypVendor: u32 = 0x40000000;
     /// KVM features leaf
-    KvmFeatures = 0x40000001,
-
+    pub const KvmFeatures: u32 = 0x40000001;
     /// Extended base leaf
-    ExtBase = 0x80000000,
+    pub const ExtBase: u32 = 0x80000000;
     /// Brand leaf
-    Brand = 0x80000002,
+    pub const Brand: u32 = 0x80000002;
     /// Address width leaf
-    AddrWidth = 0x80000008,
+    pub const AddrWidth: u32 = 0x80000008;
     /// AMD topology leaf
-    AmdTopology = 0x8000001e,
+    pub const AmdTopology: u32 = 0x8000001e;
+}
+
+impl From<u32> for X86CpuidLeafNum {
+    fn from(value: u32) -> Self {
+        Self { value }
+    }
+}
+
+impl X86CpuidLeafNum {
+    /// Get the raw u32 value
+    pub fn as_u32(&self) -> u32 {
+        self.value
+    }
 }
 
 /// Structure to represent a specific CPU feature bit
@@ -97,7 +123,7 @@ pub struct X86CpuidBit {
 macro_rules! x86_cpuid_bit {
     ($leaf:expr, $word:expr, $bit:expr) => {
         X86CpuidBit {
-            leaf_num: unsafe { core::mem::transmute::<u32, X86CpuidLeafNum>($leaf) },
+            leaf_num: X86CpuidLeafNum { value: $leaf },
             word: $word,
             bit: $bit,
         }
@@ -190,23 +216,23 @@ pub fn x86_feature_init() {
 /// A reference to the CPUID leaf data, or None if the leaf is not supported
 pub fn x86_get_cpuid_leaf(leaf: X86CpuidLeafNum) -> Option<&'static CpuidLeaf> {
     unsafe {
-        let leaf_num = leaf as u32;
-        
-        if leaf_num < X86CpuidLeafNum::HypBase as u32 {
+        let leaf_num = leaf.as_u32();
+
+        if leaf_num < X86CpuidLeafNum::HypBase {
             if unlikely(leaf_num > max_cpuid) {
                 return None;
             }
             return Some(&_cpuid[leaf_num as usize]);
-        } else if leaf_num < X86CpuidLeafNum::ExtBase as u32 {
+        } else if leaf_num < X86CpuidLeafNum::ExtBase {
             if unlikely(leaf_num > max_hyp_cpuid) {
                 return None;
             }
-            return Some(&_cpuid_hyp[(leaf_num - X86CpuidLeafNum::HypBase as u32) as usize]);
+            return Some(&_cpuid_hyp[(leaf_num - X86CpuidLeafNum::HypBase) as usize]);
         } else {
             if unlikely(leaf_num > max_ext_cpuid) {
                 return None;
             }
-            return Some(&_cpuid_ext[(leaf_num - X86CpuidLeafNum::ExtBase as u32) as usize]);
+            return Some(&_cpuid_ext[(leaf_num - X86CpuidLeafNum::ExtBase) as usize]);
         }
     }
 }
@@ -273,10 +299,8 @@ pub enum X86VendorList {
 }
 
 /// Global CPU vendor information
-pub static X86_VENDOR: X86VendorList = unsafe { X86_VENDOR_STATIC };
-extern "C" {
-    static X86_VENDOR_STATIC: X86VendorList;
-}
+/// Note: This is initialized by C code and should be updated during boot
+pub static X86_VENDOR: X86VendorList = X86VendorList::Unknown;
 
 /// Topology level type constants
 pub const X86_TOPOLOGY_INVALID: u8 = 0;
@@ -337,7 +361,7 @@ pub struct X86ModelInfo {
 /// # Returns
 ///
 /// Reference to the CPU model information
-pub fn x86_get_model() -> &'static X86ModelInfo {
+pub fn x86_get_model() -> *const X86ModelInfo {
     unsafe { sys_x86_get_model() }
 }
 
@@ -374,10 +398,8 @@ pub enum X86MicroarchList {
 }
 
 /// Global CPU microarchitecture information
-pub static X86_MICROARCH: X86MicroarchList = unsafe { X86_MICROARCH_STATIC };
-extern "C" {
-    static X86_MICROARCH_STATIC: X86MicroarchList;
-}
+/// Note: This is initialized by C code and should be updated during boot
+pub static X86_MICROARCH: X86MicroarchList = X86MicroarchList::Unknown;
 
 /// Global FSGSBASE feature flag
 pub static G_X86_FEATURE_FSGSBASE: AtomicBool = AtomicBool::new(false);
@@ -393,10 +415,7 @@ pub enum X86HypervisorList {
 }
 
 /// Global hypervisor information
-pub static X86_HYPERVISOR: X86HypervisorList = unsafe { X86_HYPERVISOR_STATIC };
-extern "C" {
-    static X86_HYPERVISOR_STATIC: X86HypervisorList;
-}
+pub static X86_HYPERVISOR: X86HypervisorList = X86HypervisorList::Unknown;
 
 /// Function type for getting timer frequency (returns 0 if unknown, otherwise value in Hz)
 pub type X86GetTimerFreqFunc = unsafe extern "C" fn() -> u64;
@@ -422,7 +441,7 @@ pub struct X86MicroarchConfig {
 /// # Returns
 ///
 /// Reference to the microarchitecture configuration
-pub fn x86_get_microarch_config() -> &'static X86MicroarchConfig {
+pub fn x86_get_microarch_config() -> *const X86MicroarchConfig {
     unsafe { sys_x86_get_microarch_config() }
 }
 
@@ -434,7 +453,7 @@ pub fn x86_get_microarch_config() -> &'static X86MicroarchConfig {
 ///
 /// The number of bits in the linear address space, or 0 if unknown
 pub fn x86_linear_address_width() -> u8 {
-    if let Some(leaf) = x86_get_cpuid_leaf(X86CpuidLeafNum::AddrWidth) {
+    if let Some(leaf) = x86_get_cpuid_leaf(X86CpuidLeafNum { value: X86CpuidLeafNum::AddrWidth }) {
         // Extracting bit 15:8 from eax register
         // Bits 15-08: #Linear Address Bits
         ((leaf.a >> 8) & 0xff) as u8
@@ -449,7 +468,7 @@ pub fn x86_linear_address_width() -> u8 {
 ///
 /// The number of bits in the physical address space, or 0 if unknown
 pub fn x86_physical_address_width() -> u8 {
-    if let Some(leaf) = x86_get_cpuid_leaf(X86CpuidLeafNum::AddrWidth) {
+    if let Some(leaf) = x86_get_cpuid_leaf(X86CpuidLeafNum { value: X86CpuidLeafNum::AddrWidth }) {
         // Extracting bit 7:0 from eax register
         // Bits 07-00: #Physical Address Bits
         (leaf.a & 0xff) as u8
@@ -464,7 +483,7 @@ pub fn x86_physical_address_width() -> u8 {
 ///
 /// The CLFLUSH line size in bytes, or 0 if unknown
 pub fn x86_get_clflush_line_size() -> u32 {
-    if let Some(leaf) = x86_get_cpuid_leaf(X86CpuidLeafNum::ModelFeatures) {
+    if let Some(leaf) = x86_get_cpuid_leaf(X86CpuidLeafNum { value: X86CpuidLeafNum::ModelFeatures }) {
         // Extracting bit 15:8 from ebx register
         // Bits 15-08: #CLFLUSH line size in quadwords
         ((leaf.b >> 8) & 0xff) * 8

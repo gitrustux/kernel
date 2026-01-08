@@ -12,7 +12,10 @@
 
 use crate::kernel::tests::runner::*;
 use crate::kernel::vm;
-use crate::debug;
+
+// Import logging macros at crate level
+use crate::{log_info, log_debug, log_error};
+
 
 /// Test unconfigured resource allocator
 fn unconfigured_test() -> TestResult {
@@ -21,10 +24,10 @@ fn unconfigured_test() -> TestResult {
     match vm::pmm::allocate(4096) {
         Ok(vaddr) => {
             vm::pmm::free(vaddr, 4096)?;
-            debug::log_debug!("Note: PMM appears to be auto-configured");
+            log_debug!("Note: PMM appears to be auto-configured");
         }
         Err(_) => {
-            debug::log_debug!("PMM not configured (expected in some contexts)");
+            log_debug!("PMM not configured (expected in some contexts)");
         }
     }
 
@@ -43,7 +46,7 @@ fn configured_test() -> TestResult {
     vm::pmm::free(vaddr1, 4096)?;
     vm::pmm::free(vaddr2, 8192)?;
 
-    debug::log_info!("Resource configured test passed");
+    log_info!("Resource configured test passed");
     Ok(())
 }
 
@@ -59,7 +62,7 @@ fn exclusive_test() -> TestResult {
 
     vm::pmm::free(base, 4096)?;
 
-    debug::log_info!("Exclusive resource test passed");
+    log_info!("Exclusive resource test passed");
     Ok(())
 }
 
@@ -78,7 +81,7 @@ fn shared_test() -> TestResult {
         vm::pmm::free(vaddr, 4096)?;
     }
 
-    debug::log_info!("Shared resource test passed");
+    log_info!("Shared resource test passed");
     Ok(())
 }
 
@@ -89,10 +92,10 @@ fn out_of_range_test() -> TestResult {
         Ok(_) => {
             // If it succeeded, free it
             vm::pmm::free(usize::MAX, usize::MAX)?;
-            debug::log_debug!("Warning: Huge allocation unexpectedly succeeded");
+            log_debug!("Warning: Huge allocation unexpectedly succeeded");
         }
         Err(_) => {
-            debug::log_debug!("Huge allocation correctly failed");
+            log_debug!("Huge allocation correctly failed");
         }
     }
 
@@ -104,12 +107,12 @@ fn out_of_range_test() -> TestResult {
                 vm::pmm::free(vaddr, max_reasonable)?;
             }
             Err(_) => {
-                debug::log_debug!("Boundary allocation failed");
+                log_debug!("Boundary allocation failed");
             }
         }
     }
 
-    debug::log_info!("Out of range test passed");
+    log_info!("Out of range test passed");
     Ok(())
 }
 
@@ -122,7 +125,7 @@ fn cleanup_test() -> TestResult {
         vm::pmm::free(vaddr, 4096)?;
     }
 
-    debug::log_info!("Resource cleanup test passed");
+    log_info!("Resource cleanup test passed");
     Ok(())
 }
 

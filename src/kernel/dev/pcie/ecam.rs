@@ -68,8 +68,16 @@ impl EcamRegion {
     /// The physical base address must be valid and the region must be properly mapped
     pub unsafe fn map(&mut self) -> core::result::Result<(), &'static str> {
         // Map the ECAM region using the MMU
+        // Use architecture-agnostic device mapping flags
+        #[cfg(target_arch = "x86_64")]
         let _flags = crate::kernel::arch::amd64::page_tables::mmu_flags::MMU_FLAGS_PERM_DEVICE
             | crate::kernel::arch::amd64::page_tables::mmu_flags::MMU_FLAGS_UNCACHED;
+
+        #[cfg(target_arch = "aarch64")]
+        let _flags = 0u64; // TODO: Use ARM64-specific device flags
+
+        #[cfg(target_arch = "riscv64")]
+        let _flags = 0u64; // TODO: Use RISC-V-specific device flags
 
         // TODO: Implement proper MMU mapping
         // For now, just set a dummy virtual address

@@ -36,6 +36,9 @@ pub mod pager;
 pub mod stats;
 pub mod fault;
 pub mod walker;
+pub mod pmm;
+pub mod physmap;
+pub mod vm_object;
 
 // Re-exports for convenience
 pub use layout::{
@@ -68,6 +71,47 @@ pub use aspace::{
     AddressSpace,
     AddressSpaceFlags,
 };
+
+// Re-export VmAspace as an alias for AddressSpace
+pub use aspace::AddressSpace as VmAspace;
+
+// Re-export architecture-specific arch_zero_page function
+#[cfg(target_arch = "aarch64")]
+pub use crate::kernel::arch::arm64::mmu::arch_zero_page;
+
+#[cfg(target_arch = "x86_64")]
+pub use crate::kernel::arch::amd64::asm::arch_zero_page;
+
+#[cfg(target_arch = "riscv64")]
+pub use crate::kernel::arch::riscv64::mmu::arch_zero_page;
+
+// ============================================================================
+// Page Fault Flags
+// ============================================================================
+
+/// Page fault flag: write access
+pub const VMM_PF_FLAG_WRITE: u32 = 1u32 << 0;
+
+/// Page fault flag: user mode access
+pub const VMM_PF_FLAG_USER: u32 = 1u32 << 1;
+
+/// Page fault flag: guest access
+pub const VMM_PF_FLAG_GUEST: u32 = 1u32 << 2;
+
+/// Page fault flag: instruction fetch
+pub const VMM_PF_FLAG_INSTRUCTION: u32 = 1u32 << 3;
+
+/// Page fault flag: page not present
+pub const VMM_PF_FLAG_NOT_PRESENT: u32 = 1u32 << 4;
+
+/// Page fault flag: hardware fault
+pub const VMM_PF_FLAG_HW_FAULT: u32 = 1u32 << 5;
+
+/// Page fault flag: software fault
+pub const VMM_PF_FLAG_SW_FAULT: u32 = 1u32 << 6;
+
+/// Page fault flag mask
+pub const VMM_PF_FLAG_FAULT_MASK: u32 = VMM_PF_FLAG_HW_FAULT | VMM_PF_FLAG_SW_FAULT;
 
 /// Virtual memory errors
 #[repr(i32)]
@@ -142,6 +186,60 @@ pub fn init() {
     layout::validate_layout();
     page_table::init();
     aspace::init();
+}
+
+/// Check if an address is a user address
+pub fn is_user_address(addr: u64) -> bool {
+    #[cfg(target_arch = "aarch64")]
+    {
+        // ARM64 user space is typically 0x0000_0000_0000_0000 to 0x0000_ffff_ffff_ffff
+        addr < 0x1_0000_0000_0000
+    }
+
+    #[cfg(target_arch = "x86_64")]
+    {
+        // AMD64 user space is typically 0x0000_0000_0000_0000 to 0x0000_7fff_ffff_ffff
+        addr < 0x8000_0000_0000
+    }
+
+    #[cfg(target_arch = "riscv64")]
+    {
+        // RISC-V user space is typically 0x0000_0000_0000_0000 to 0x0000_0000_ffff_ffff
+        addr < 0x1_0000_0000
+    }
+}
+
+/// Convert physical address to virtual address in physical mapping window
+pub fn phys_to_virt(paddr: u64) -> u64 {
+    #[cfg(target_arch = "aarch64")]
+    {
+        // ARM64 physical mapping window
+        0xffff_0000_0000_0000 + paddr
+    }
+
+    #[cfg(target_arch = "x86_64")]
+    {
+        // AMD64 physical mapping window
+        0xffff_8000_0000_0000 + paddr
+    }
+
+    #[cfg(target_arch = "riscv64")]
+    {
+        // RISC-V physical mapping window
+        0xffff_ffff_8000_0000 + paddr
+    }
+}
+
+/// Page fault handler (LK compatibility stub)
+pub fn vmm_page_fault_handler(_addr: u64, _flags: u32) -> i32 {
+    // TODO: Implement page fault handling
+    0
+}
+
+/// Convert virtual address to physical address (LK compatibility stub)
+pub fn vaddr_to_paddr(_vaddr: u64) -> u64 {
+    // TODO: Implement virtual to physical address conversion
+    0
 }
 
 // ============================================================================
@@ -239,7 +337,7 @@ pub unsafe fn physmap_virt_to_phys(vaddr: VAddr) -> Option<PAddr> {
     {
         let base = layout::arm64::KERNEL_PHYSMAP_BASE;
         let size = layout::arm64::KERNEL_PHYSMAP_SIZE;
-        if vaddr >= base && vaddr < base + size {
+        if vaddr >= base && vaddr - base < size {
             Some(vaddr - base)
         } else {
             None
@@ -250,7 +348,7 @@ pub unsafe fn physmap_virt_to_phys(vaddr: VAddr) -> Option<PAddr> {
     {
         let base = layout::amd64::KERNEL_PHYSMAP_BASE;
         let size = layout::amd64::KERNEL_PHYSMAP_SIZE;
-        if vaddr >= base && vaddr < base + size {
+        if vaddr >= base && vaddr - base < size {
             Some(vaddr - base)
         } else {
             None
@@ -259,9 +357,9 @@ pub unsafe fn physmap_virt_to_phys(vaddr: VAddr) -> Option<PAddr> {
 
     #[cfg(target_arch = "riscv64")]
     {
-        let base = layout::riscv64::KERNEL_PHYSMAP_BASE;
-        let size = layout::riscv64::KERNEL_PHYSMAP_SIZE;
-        if vaddr >= base && vaddr < base + size {
+        let base = layout::riscv::KERNEL_PHYSMAP_BASE;
+        let size = layout::riscv::KERNEL_PHYSMAP_SIZE;
+        if vaddr >= base && vaddr - base < size {
             Some(vaddr - base)
         } else {
             None
@@ -283,8 +381,23 @@ pub fn phys_to_physmap(paddr: PAddr) -> VAddr {
 
     #[cfg(target_arch = "riscv64")]
     {
-        layout::riscv64::KERNEL_PHYSMAP_BASE + paddr
+        layout::riscv::KERNEL_PHYSMAP_BASE + paddr
     }
+}
+
+// ============================================================================
+// Re-exports for vm::vm compatibility
+// ============================================================================
+
+/// Public VM API submodule
+/// Re-exports commonly used VM functions for compatibility with code using `crate::vm::vm::*`
+pub mod vm {
+    pub use crate::kernel::mmu::{
+        vm_is_user_address as is_user_address,
+        vm_is_user_address_range as is_user_address_range,
+        virt_to_phys,
+        phys_to_virt,
+    };
 }
 
 #[cfg(test)]

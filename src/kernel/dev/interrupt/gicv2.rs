@@ -59,7 +59,8 @@
 #![no_std]
 
 use crate::arch::arm64::periphmap;
-use crate::debug;
+use crate::kernel::mp::MpIpiType;
+use crate::{log_info, log_error, log_debug};
 use core::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use crate::kernel::sync::spin::SpinMutex as SpinMutex;
 
@@ -134,6 +135,9 @@ static IPI_BASE: AtomicU32 = AtomicU32::new(0);
 
 /// Maximum number of interrupts
 static MAX_IRQS: AtomicU32 = AtomicU32::new(0);
+
+/// GIC SPI interrupt base (Shared Peripheral Interrupts)
+const GIC_BASE_SPI: u32 = 32;
 
 /// Distributor lock
 static GICD_LOCK: SpinMutex<()> = SpinMutex::new(());
@@ -227,7 +231,7 @@ pub unsafe fn platform_init(
         return Err(e);
     }
 
-    debug::log_info!("GICv2: Initialized, base={:#x}, max_irqs={}",
+    log_info!("GICv2: Initialized, base={:#x}, max_irqs={}",
                      base, MAX_IRQS.load(Ordering::Acquire));
 
     Ok(())
@@ -259,19 +263,19 @@ unsafe fn init() -> Result<(), &'static str> {
     let max_irqs = ((it_lines_number + 1) * 32) as u32;
     MAX_IRQS.store(max_irqs, Ordering::Release);
 
-    debug::log_debug!("GICv2: max_irqs={}", max_irqs);
+    log_debug!("GICv2: max_irqs={}", max_irqs);
 
     // Disable all interrupts
     for i in (0..max_irqs).step_by(32) {
-        gicd_write(GICD_ICENABLER + (i / 32) * 4, 0xFFFFFFFF);
-        gicd_write(GICD_ICPENDR + (i / 32) * 4, 0xFFFFFFFF);
+        gicd_write(GICD_ICENABLER + ((i as usize) / 32) * 4, 0xFFFFFFFF);
+        gicd_write(GICD_ICPENDR + ((i as usize) / 32) * 4, 0xFFFFFFFF);
     }
 
     // Set SPI targets to CPU 0 (for CPU 0-7)
     let max_cpu = ((typer >> 5) & 0x7) as u32;
     if max_cpu > 0 {
         for i in (32..max_irqs).step_by(4) {
-            gicd_write(GICD_ITARGETSR + (i / 4) * 4, 0x01010101);
+            gicd_write(GICD_ITARGETSR + ((i as usize) / 4) * 4, 0x01010101);
         }
     }
 
@@ -304,10 +308,10 @@ pub fn init_percpu() {
     // TODO: Mark CPU as online
     // TODO: Unmask IPIs
     let ipi_base = IPI_BASE.load(Ordering::Acquire);
-    let _ = unmask_interrupt(MpIpi::Generic as u32 + ipi_base);
-    let _ = unmask_interrupt(MpIpi::Reschedule as u32 + ipi_base);
-    let _ = unmask_interrupt(MpIpi::Interrupt as u32 + ipi_base);
-    let _ = unmask_interrupt(MpIpi::Halt as u32 + ipi_base);
+    let _ = unmask_interrupt(MpIpiType::Generic as u32 + ipi_base);
+    let _ = unmask_interrupt(MpIpiType::Reschedule as u32 + ipi_base);
+    let _ = unmask_interrupt(MpIpiType::Interrupt as u32 + ipi_base);
+    let _ = unmask_interrupt(MpIpiType::Halt as u32 + ipi_base);
 }
 
 /// Mask (disable) an interrupt
@@ -319,7 +323,7 @@ pub fn mask_interrupt(irq: u32) -> i32 {
 
     let _lock = GICD_LOCK.lock();
     unsafe {
-        let reg = GICD_ICENABLER + (irq / 32) * 4;
+        let reg = GICD_ICENABLER + ((irq as usize) / 32) * 4;
         let mask = 1u32 << (irq % 32);
         let current = gicd_read(reg);
         gicd_write(reg, current | mask);
@@ -337,7 +341,7 @@ pub fn unmask_interrupt(irq: u32) -> i32 {
 
     let _lock = GICD_LOCK.lock();
     unsafe {
-        let reg = GICD_ISENABLER + (irq / 32) * 4;
+        let reg = GICD_ISENABLER + ((irq as usize) / 32) * 4;
         let mask = 1u32 << (irq % 32);
         let current = gicd_read(reg);
         gicd_write(reg, current | mask);
@@ -361,7 +365,7 @@ pub fn configure_interrupt(
 
     let _lock = GICD_LOCK.lock();
     unsafe {
-        let reg = GICD_ICFGR + (irq / 16) * 4;
+        let reg = GICD_ICFGR + ((irq as usize) / 16) * 4;
         let bit_shift = ((irq % 16) * 2) + 1;
         let current = gicd_read(reg);
         let new_val = if tm == InterruptTriggerMode::Edge {

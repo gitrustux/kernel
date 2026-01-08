@@ -10,7 +10,39 @@
 //! the x86 memory management unit, including page tables and memory types.
 
 use crate::arch::amd64::page_tables::constants::*;
+use crate::kernel::arch::amd64::include::arch::defines::*;
 use crate::rustux::types::*;
+
+// PAT selector macros (for use in const contexts)
+/// Calculate PTE PAT selector value for PAT index 0 (Write-Back)
+pub const X86_PAT_PTE_SELECTOR_0: u64 = 0x6; // WB: CD=0, WT=0, PAT=0
+/// Calculate PTE PAT selector value for PAT index 1 (Write-Through)
+pub const X86_PAT_PTE_SELECTOR_1: u64 = 0x7; // WT: CD=0, WT=1, PAT=0
+/// Calculate PTE PAT selector value for PAT index 2 (UC-)
+pub const X86_PAT_PTE_SELECTOR_2: u64 = 0x0; // UC-: CD=1, WT=0, PAT=0
+/// Calculate PTE PAT selector value for PAT index 3 (Uncacheable)
+pub const X86_PAT_PTE_SELECTOR_3: u64 = 0x1; // UC: CD=1, WT=1, PAT=0
+/// Calculate PTE PAT selector value for PAT index 7 (Write-Combining)
+pub const X86_PAT_PTE_SELECTOR_7: u64 = 0x1008; // WC: CD=0, WT=0, PAT=1
+
+// PAT selector compatibility macros (for use in non-const contexts)
+#[inline]
+pub fn x86_pat_pte_selector(pat_index: u64) -> u64 {
+    match pat_index {
+        0 => X86_PAT_PTE_SELECTOR_0,
+        1 => X86_PAT_PTE_SELECTOR_1,
+        2 => X86_PAT_PTE_SELECTOR_2,
+        3 => X86_PAT_PTE_SELECTOR_3,
+        7 => X86_PAT_PTE_SELECTOR_7,
+        _ => 0,
+    }
+}
+
+#[inline]
+pub fn x86_pat_large_selector(pat_index: u64) -> u64 {
+    x86_pat_pte_selector(pat_index)
+}
+
 
 // Extended Page Table (EPT) flags for virtualization
 /// EPT Read permission
@@ -72,23 +104,23 @@ pub const X86_PAT_INDEX7: u8 = X86_PAT_WC;
 
 // PTE PAT selectors
 /// PTE PAT selector for write-back caching
-pub const X86_MMU_PTE_PAT_WRITEBACK: u64 = X86_PAT_PTE_SELECTOR(0);
+pub const X86_MMU_PTE_PAT_WRITEBACK: u64 = X86_PAT_PTE_SELECTOR_0;
 /// PTE PAT selector for write-through caching
-pub const X86_MMU_PTE_PAT_WRITETHROUGH: u64 = X86_PAT_PTE_SELECTOR(1);
+pub const X86_MMU_PTE_PAT_WRITETHROUGH: u64 = X86_PAT_PTE_SELECTOR_1;
 /// PTE PAT selector for uncachable memory
-pub const X86_MMU_PTE_PAT_UNCACHABLE: u64 = X86_PAT_PTE_SELECTOR(3);
+pub const X86_MMU_PTE_PAT_UNCACHABLE: u64 = X86_PAT_PTE_SELECTOR_3;
 /// PTE PAT selector for write-combining memory
-pub const X86_MMU_PTE_PAT_WRITE_COMBINING: u64 = X86_PAT_PTE_SELECTOR(7);
+pub const X86_MMU_PTE_PAT_WRITE_COMBINING: u64 = X86_PAT_PTE_SELECTOR_7;
 
-// Large page PAT selectors
+// Large page PAT selectors (use same values as PTE for 2MB/4MB pages)
 /// Large page PAT selector for write-back caching
-pub const X86_MMU_LARGE_PAT_WRITEBACK: u64 = X86_PAT_LARGE_SELECTOR(0);
+pub const X86_MMU_LARGE_PAT_WRITEBACK: u64 = X86_PAT_PTE_SELECTOR_0;
 /// Large page PAT selector for write-through caching
-pub const X86_MMU_LARGE_PAT_WRITETHROUGH: u64 = X86_PAT_LARGE_SELECTOR(1);
+pub const X86_MMU_LARGE_PAT_WRITETHROUGH: u64 = X86_PAT_PTE_SELECTOR_1;
 /// Large page PAT selector for uncachable memory
-pub const X86_MMU_LARGE_PAT_UNCACHABLE: u64 = X86_PAT_LARGE_SELECTOR(3);
+pub const X86_MMU_LARGE_PAT_UNCACHABLE: u64 = X86_PAT_PTE_SELECTOR_3;
 /// Large page PAT selector for write-combining memory
-pub const X86_MMU_LARGE_PAT_WRITE_COMBINING: u64 = X86_PAT_LARGE_SELECTOR(7);
+pub const X86_MMU_LARGE_PAT_WRITE_COMBINING: u64 = X86_PAT_PTE_SELECTOR_7;
 
 /// Default flags for inner page directory entries
 pub const X86_KERNEL_PD_FLAGS: u64 = X86_MMU_PG_RW | X86_MMU_PG_P;
@@ -207,22 +239,24 @@ extern "C" {
 }
 
 /// Default virtual address width (will be updated at runtime)
-pub mut G_VADDR_WIDTH: u8 = 48;
+pub static mut G_VADDR_WIDTH: u8 = 48;
 /// Default physical address width (will be updated at runtime)
-pub mut G_PADDR_WIDTH: u8 = 32;
+pub static mut G_PADDR_WIDTH: u8 = 32;
 /// Whether the system supports 1GB huge pages
-pub mut SUPPORTS_HUGE_PAGES: bool = false;
+pub static mut SUPPORTS_HUGE_PAGES: bool = false;
 
 /// Check if a virtual address is canonical
 ///
 /// In x86-64, valid addresses must sign-extend the 48th bit through the upper bits.
 /// This is a pure Rust implementation of the check.
 pub fn x86_is_vaddr_canonical_impl(vaddr: VAddr) -> bool {
-    let max_vaddr_lohalf: u64 = (1u64 << (G_VADDR_WIDTH - 1)) - 1;
-    let min_vaddr_hihalf: u64 = !max_vaddr_lohalf;
+    unsafe {
+        let max_vaddr_lohalf: u64 = (1u64 << (G_VADDR_WIDTH - 1)) - 1;
+        let min_vaddr_hihalf: u64 = !max_vaddr_lohalf;
 
-    // Check to see if the address is a canonical address
-    !((vaddr as u64 > max_vaddr_lohalf) && (vaddr as u64 < min_vaddr_hihalf))
+        // Check to see if the address is a canonical address
+        !(((vaddr as u64) > max_vaddr_lohalf) && ((vaddr as u64) < min_vaddr_hihalf))
+    }
 }
 
 /// Check if a virtual address is aligned and canonical
@@ -242,12 +276,14 @@ pub fn x86_mmu_check_paddr_impl(paddr: PAddr) -> bool {
     use crate::arch::amd64::page_tables::constants::PAGE_SIZE;
 
     // Check to see if the address is PAGE aligned
-    if paddr & (PAGE_SIZE - 1) != 0 {
+    if paddr & ((PAGE_SIZE - 1) as u64) != 0 {
         return false;
     }
 
-    let max_paddr: u64 = (1u64 << G_PADDR_WIDTH) - 1;
-    paddr <= max_paddr as usize
+    unsafe {
+        let max_paddr: u64 = (1u64 << G_PADDR_WIDTH) - 1;
+        paddr <= max_paddr
+    }
 }
 
 /// Invalidate all TLB entries, including global entries
@@ -349,11 +385,8 @@ pub fn x86_kernel_cr3_impl() -> PAddr {
     // The kernel page table physical address is computed as:
     // KERNEL_PT - __code_start + KERNEL_LOAD_OFFSET
     // For now, return a placeholder
-    use crate::arch::amd64::page_tables::constants::KERNEL_BASE;
-    use crate::arch::amd64::page_tables::constants::KERNEL_LOAD_OFFSET;
-
-    // TODO: Get the actual value from the linker
-    KERNEL_BASE - KERNEL_LOAD_OFFSET
+    // Use the arch-level kernel base constant
+    crate::kernel::arch::KERNEL_BASE as PAddr
 }
 
 /// Convert physical address to kernel virtual address
@@ -361,7 +394,7 @@ pub fn x86_kernel_cr3_impl() -> PAddr {
 /// # Safety
 /// Caller must ensure the physical address is valid and mapped
 pub unsafe fn paddr_to_physmap(paddr: PAddr) -> VAddr {
-    use crate::arch::amd64::page_tables::constants::PHYSMAP_BASE;
-
-    PHYSMAP_BASE + paddr
+    // TODO: Use proper PHYSMAP_BASE from arch constants
+    // For now, use a simple offset calculation
+    (crate::kernel::arch::KERNEL_BASE as VAddr) + (paddr as VAddr)
 }

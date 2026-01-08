@@ -5,17 +5,23 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT
 
-use crate::arch::arch_ops;
+use crate::arch::ops;  // arch_ops is re-exported as ops from arch module
+// Alias for compatibility with arch_ops:: prefix
+use crate::arch::ops as arch_ops;
 use crate::arch::arm64;
 use crate::arch::arm64::exceptions;
+use crate::arch::arm64::interrupts;
+// Alias interrupts as interrupt for compatibility
+use crate::arch::arm64::interrupts as interrupt;
 use crate::arch::exception;
 use crate::arch::user_copy;
 
 use crate::bits;
 use crate::debug;
+use crate::rustux::types::err::*;
+use crate::sys::rx_excp_type_t;
 use core::fmt::Write;
 
-use crate::kernel::interrupt;
 use crate::kernel::thread;
 
 use crate::platform;
@@ -29,9 +35,27 @@ use crate::lib::crashlog;
 use crate::rustux::syscalls::exception::*;
 use crate::rustux::types::*;
 
+// Import KCOUNTER macro at crate level
+use crate::KCOUNTER;
+
 const LOCAL_TRACE: bool = false;
 
 const DFSC_ALIGNMENT_FAULT: u32 = 0b100001;
+
+KCOUNTER!(
+    EXCEPTIONS_BRKPT, "kernel.exceptions.breakpoint");
+KCOUNTER!(
+    EXCEPTIONS_FPU, "kernel.exceptions.fpu");
+KCOUNTER!(
+    EXCEPTIONS_PAGE, "kernel.exceptions.page_fault");
+KCOUNTER!(
+    EXCEPTIONS_IRQ, "kernel.exceptions.irq");
+KCOUNTER!(
+    EXCEPTIONS_UNHANDLED, "kernel.exceptions.unhandled");
+KCOUNTER!(
+    EXCEPTIONS_USER, "kernel.exceptions.user");
+KCOUNTER!(
+    EXCEPTIONS_UNKNOWN, "kernel.exceptions.unknown");
 
 fn dump_iframe(iframe: &arm64::arm64_iframe_long) {
     println!("iframe {:p}:", iframe);
@@ -46,21 +70,6 @@ fn dump_iframe(iframe: &arm64::arm64_iframe_long) {
     println!("elr  {:#18x}", iframe.elr);
     println!("spsr {:#18x}", iframe.spsr);
 }
-
-counters::KCOUNTER!(
-    EXCEPTIONS_BRKPT, "kernel.exceptions.breakpoint");
-counters::KCOUNTER!(
-    EXCEPTIONS_FPU, "kernel.exceptions.fpu");
-counters::KCOUNTER!(
-    EXCEPTIONS_PAGE, "kernel.exceptions.page_fault");
-counters::KCOUNTER!(
-    EXCEPTIONS_IRQ, "kernel.exceptions.irq");
-counters::KCOUNTER!(
-    EXCEPTIONS_UNHANDLED, "kernel.exceptions.unhandled");
-counters::KCOUNTER!(
-    EXCEPTIONS_USER, "kernel.exceptions.user");
-counters::KCOUNTER!(
-    EXCEPTIONS_UNKNOWN, "kernel.exceptions.unknown");
 
 fn try_dispatch_user_data_fault_exception(
     type_: rx_excp_type_t, 
@@ -92,8 +101,7 @@ fn try_dispatch_user_exception(
     try_dispatch_user_data_fault_exception(type_, iframe, esr, 0)
 }
 
-#[no_return]
-fn exception_die(iframe: &mut arm64::arm64_iframe_long, esr: u32) {
+fn exception_die(iframe: &mut arm64::arm64_iframe_long, esr: u32) -> ! {
     platform::platform_panic_start();
 
     let ec = bits::BITS_SHIFT(esr, 31, 26);
@@ -190,8 +198,8 @@ fn arm64_instruction_abort_handler(iframe: &mut arm64::arm64_iframe_long, except
             iframe.elr, is_user, far, esr, iss);
 
     arch_ops::arch_enable_ints();
-    EXCEPTIONS_PAGE.add(1);
-    interrupt::CPU_STATS_INC!(page_faults);
+    EXCEPTIONS_PAGE.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
+    CPU_STATS_INC!(page_faults);
     
     let err = fault::vmm_page_fault_handler(far, pf_flags);
     
@@ -204,7 +212,7 @@ fn arm64_instruction_abort_handler(iframe: &mut arm64::arm64_iframe_long, except
     // If this is from user space, let the user exception handler
     // get a shot at it.
     if is_user {
-        EXCEPTIONS_USER.add(1);
+        EXCEPTIONS_USER.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
         if try_dispatch_user_data_fault_exception(RX_EXCP_FATAL_PAGE_FAULT, iframe, esr, far) == RX_OK {
             return;
         }
@@ -245,7 +253,7 @@ fn arm64_data_abort_handler(iframe: &mut arm64::arm64_iframe_long, exception_fla
     
     if likely(dfsc != DFSC_ALIGNMENT_FAULT) {
         arch_ops::arch_enable_ints();
-        EXCEPTIONS_PAGE.add(1);
+        EXCEPTIONS_PAGE.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
         
         let err = fault::vmm_page_fault_handler(far, pf_flags);
         
@@ -267,7 +275,7 @@ fn arm64_data_abort_handler(iframe: &mut arm64::arm64_iframe_long, exception_fla
     // If this is from user space, let the user exception handler
     // get a shot at it.
     if is_user {
-        EXCEPTIONS_USER.add(1);
+        EXCEPTIONS_USER.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
         let excp_type = if unlikely(dfsc == DFSC_ALIGNMENT_FAULT) {
             RX_EXCP_UNALIGNED_ACCESS
         } else {
@@ -310,15 +318,15 @@ pub extern "C" fn arm64_sync_exception(
 
     match ec {
         0b000000 => { /* unknown reason */
-            EXCEPTIONS_UNKNOWN.add(1);
+            EXCEPTIONS_UNKNOWN.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
             arm64_unknown_handler(iframe, exception_flags, esr);
         },
         0b111000 | 0b111100 => { /* BRK from arm32 or arm64 */
-            EXCEPTIONS_BRKPT.add(1);
+            EXCEPTIONS_BRKPT.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
             arm64_brk_handler(iframe, exception_flags, esr);
         },
         0b000111 => { /* floating point */
-            EXCEPTIONS_FPU.add(1);
+            EXCEPTIONS_FPU.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
             arm64_fpu_handler(iframe, exception_flags, esr);
         },
         0b010001 | 0b010101 => { /* syscall from arm32 or arm64 */
@@ -345,7 +353,7 @@ pub extern "C" fn arm64_sync_exception(
                 exception_die(iframe, esr);
             }
             /* let the user exception handler get a shot at it */
-            EXCEPTIONS_UNHANDLED.add(1);
+            EXCEPTIONS_UNHANDLED.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
             if try_dispatch_user_exception(RX_EXCP_GENERAL, iframe, esr) == RX_OK {
                 // Handled successfully
             } else {
@@ -384,7 +392,7 @@ pub extern "C" fn arm64_irq(iframe: *mut arm64::arm64_iframe_short, exception_fl
     let mut state = interrupt::int_handler_saved_state_t::default();
     interrupt::int_handler_start(&mut state);
 
-    EXCEPTIONS_IRQ.add(1);
+    EXCEPTIONS_IRQ.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
     unsafe {
         platform::platform_irq(iframe);
     }

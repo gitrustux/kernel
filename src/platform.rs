@@ -11,6 +11,53 @@
 
 #![no_std]
 
+// ============================================================================
+// Halt Constants
+// ============================================================================
+
+/// Halt reason: software panic
+pub const HALT_REASON_SW_PANIC: u32 = 0x1;
+
+/// Halt reason: user request
+pub const HALT_REASON_USER_REQUEST: u32 = 0x2;
+
+/// Halt action: halt the system
+pub const HALT_ACTION_HALT: u32 = 0x1;
+
+/// Halt action: reboot the system
+pub const HALT_ACTION_REBOOT: u32 = 0x2;
+
+/// Halt action: shutdown the system
+pub const HALT_ACTION_SHUTDOWN: u32 = 0x3;
+
+// ============================================================================
+// Platform Functions
+// ============================================================================
+
+/// Initialize platform-specific MMU mappings
+pub fn platform_init_mmu_mappings() {
+    // Platform-specific MMU mappings are handled by architecture code
+}
+
+/// Platform halt
+pub fn platform_halt(_reason: u32, _action: u32) -> ! {
+    loop {
+        core::hint::spin_loop();
+    }
+}
+
+/// Platform panic start
+pub fn platform_panic_start() -> ! {
+    loop {
+        core::hint::spin_loop();
+    }
+}
+
+/// Get platform IRQ information
+pub fn platform_irq() -> u32 {
+    0 // No IRQ by default
+}
+
 pub mod init {
     use crate::rustux::types::*;
 

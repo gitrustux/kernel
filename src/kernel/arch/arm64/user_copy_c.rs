@@ -4,8 +4,6 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT
 
-use crate::arch::arm64::user_copy::_arm64_user_copy;
-use crate::arch::user_copy::*;
 use crate::kernel::thread::get_current_thread;
 use crate::vm::vm::is_user_address_range;
 
@@ -90,4 +88,18 @@ extern "C" {
         len: usize,
         fault_return: *mut *mut core::ffi::c_void,
     ) -> rx_status_t;
+}
+
+// ============================================================================
+// Public API (with arm64_ prefix)
+// ============================================================================
+
+/// Copy data to user space (arm64_ prefix variant)
+pub fn arm64_copy_to_user(dst: *mut u8, src: *const u8, len: usize) -> rx_status_t {
+    unsafe { arch_copy_to_user(dst, src, len) }
+}
+
+/// Copy data from user space (arm64_ prefix variant)
+pub fn arm64_copy_from_user(dst: *mut u8, src: *const u8, len: usize) -> rx_status_t {
+    unsafe { arch_copy_from_user(dst, src, len) }
 }

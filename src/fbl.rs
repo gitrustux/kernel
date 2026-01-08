@@ -161,3 +161,104 @@ pub mod rc {
         }
     }
 }
+
+// Algorithm support
+pub mod algorithm {
+    /// Find the first set bit in a word
+    pub fn find_first_set_bit(word: u64) -> Option<u32> {
+        if word == 0 {
+            None
+        } else {
+            Some(word.trailing_zeros())
+        }
+    }
+
+    /// Find the last set bit in a word
+    pub fn find_last_set_bit(word: u64) -> Option<u32> {
+        if word == 0 {
+            None
+        } else {
+            Some(63 - word.leading_zeros())
+        }
+    }
+
+    /// Count the number of set bits in a word
+    pub fn count_set_bits(word: u64) -> u32 {
+        word.count_ones()
+    }
+}
+
+// Auto-call support
+pub mod auto_call {
+    /// Auto-call trait for initialization
+    pub trait AutoCall {
+        fn auto_call(&self);
+    }
+}
+
+// Auto-lock support
+pub mod auto_lock {
+    use crate::kernel::sync::spin::SpinMutex;
+
+    /// RAII-style lock guard
+    pub struct AutoLock<'a, T> {
+        _guard: core::sync::atomic::AtomicBool,
+        _data: core::marker::PhantomData<&'a T>,
+    }
+
+    impl<'a, T> AutoLock<'a, T> {
+        pub fn new(_mutex: &'a SpinMutex<T>) -> Self {
+            Self {
+                _guard: core::sync::atomic::AtomicBool::new(false),
+                _data: core::marker::PhantomData,
+            }
+        }
+    }
+}
+
+// RefPtr (smart pointer) support
+pub mod ref_ptr {
+    use core::sync::atomic::{AtomicUsize, Ordering};
+    use alloc::boxed::Box;
+
+    /// Reference counted smart pointer
+    pub struct RefPtr<T> {
+        ptr: *mut T,
+        ref_count: AtomicUsize,
+    }
+
+    impl<T> RefPtr<T> {
+        pub fn new(val: T) -> Self {
+            let boxed = Box::into_raw(Box::new(val));
+            Self {
+                ptr: boxed,
+                ref_count: AtomicUsize::new(1),
+            }
+        }
+
+        pub fn clone(&self) -> Self {
+            self.ref_count.fetch_add(1, Ordering::Relaxed);
+            Self {
+                ptr: self.ptr,
+                ref_count: AtomicUsize::new(0),
+            }
+        }
+
+        pub unsafe fn deref(&self) -> &T {
+            &*self.ptr
+        }
+    }
+
+    impl<T> Drop for RefPtr<T> {
+        fn drop(&mut self) {
+            if self.ref_count.fetch_sub(1, Ordering::Release) == 1 {
+                unsafe {
+                    let _ = Box::from_raw(self.ptr);
+                }
+            }
+        }
+    }
+}
+
+// Re-export RefPtr at crate level for convenience
+pub use ref_ptr::RefPtr;

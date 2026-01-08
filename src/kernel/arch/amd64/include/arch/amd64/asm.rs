@@ -12,10 +12,10 @@
 use core::ops::{Add, Sub};
 
 /// Physical load address of the kernel
-pub const PHYS_LOAD_ADDRESS: usize = crate::arch::KERNEL_LOAD_OFFSET;
+pub const PHYS_LOAD_ADDRESS: usize = crate::arch::KERNEL_LOAD_OFFSET as usize;
 
 /// Difference between kernel virtual address and physical address
-pub const PHYS_ADDR_DELTA: usize = crate::arch::KERNEL_BASE - PHYS_LOAD_ADDRESS;
+pub const PHYS_ADDR_DELTA: usize = crate::arch::KERNEL_BASE as usize - PHYS_LOAD_ADDRESS;
 
 /// Convert a virtual address to a physical address
 ///
@@ -27,8 +27,8 @@ pub const PHYS_ADDR_DELTA: usize = crate::arch::KERNEL_BASE - PHYS_LOAD_ADDRESS;
 ///
 /// The corresponding physical address
 #[inline]
-pub const fn phys<T>(vaddr: T) -> T 
-where 
+pub fn phys<T>(vaddr: T) -> T
+where
     T: Sub<usize, Output = T> + Copy
 {
     vaddr - PHYS_ADDR_DELTA
@@ -44,8 +44,8 @@ where
 ///
 /// The corresponding virtual address
 #[inline]
-pub const fn virt<T>(paddr: T) -> T 
-where 
+pub fn virt<T>(paddr: T) -> T
+where
     T: Add<usize, Output = T> + Copy
 {
     paddr + PHYS_ADDR_DELTA

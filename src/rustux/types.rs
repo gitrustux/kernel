@@ -44,6 +44,12 @@ pub type Irq = u32;
 /// Vector number type
 pub type Vector = u32;
 
+/// Unsigned pointer-sized integer
+pub type UIntPtr = usize;
+
+/// Signed pointer-sized integer
+pub type SIntPtr = isize;
+
 /// Time value in nanoseconds
 pub type Nanoseconds = u64;
 
@@ -100,6 +106,25 @@ pub type RxStatus = Status;
 /// Legacy status type (alias for Status)
 pub type rx_status_t = Status;
 
+/// Trait for status codes that can be checked for success
+pub trait StatusTrait {
+    /// Check if the status code indicates success
+    fn is_ok(&self) -> bool;
+
+    /// Check if the status code indicates success
+    fn is_error(&self) -> bool {
+        !self.is_ok()
+    }
+}
+
+/// Implement StatusTrait for i32 (Status type is i32)
+impl StatusTrait for i32 {
+    fn is_ok(&self) -> bool {
+        *self == 0
+    }
+}
+
+
 /// Common error values
 pub mod err {
     use super::Status;
@@ -127,6 +152,28 @@ pub mod err {
     pub const RX_ERR_BAD_SYSCALL: Status = -22;
     pub const RX_ERR_STOP: Status = super::status::ERR_STOP;
     pub const RX_ERR_NEXT: Status = super::status::ERR_NEXT;
+
+    /// ============================================================================
+    /// Exception types
+    /// ============================================================================
+
+    /// Exception type codes (from zircon/hypervisor/public/hypervisor.h)
+    pub const ZX_EXCP_FATAL_PAGE_FAULT: u32 = 0x202;
+    pub const ZX_EXCP_GENERAL: u32 = 0x500;
+    pub const ZX_EXCP_SW_BREAKPOINT: u32 = 0x800;
+    pub const ZX_EXCP_HW_BREAKPOINT: u32 = 0x801;
+    pub const ZX_EXCP_UNALIGNED_ACCESS: u32 = 0x802;
+    pub const ZX_EXCP_UNDEFINED_INSTRUCTION: u32 = 0x803;
+    pub const ZX_EXCP_POLICY_ERROR: u32 = 0x804;
+
+    /// Legacy exception type aliases
+    pub const RX_EXCP_FATAL_PAGE_FAULT: u32 = ZX_EXCP_FATAL_PAGE_FAULT;
+    pub const RX_EXCP_GENERAL: u32 = ZX_EXCP_GENERAL;
+    pub const RX_EXCP_SW_BREAKPOINT: u32 = ZX_EXCP_SW_BREAKPOINT;
+    pub const RX_EXCP_HW_BREAKPOINT: u32 = ZX_EXCP_HW_BREAKPOINT;
+    pub const RX_EXCP_UNALIGNED_ACCESS: u32 = ZX_EXCP_UNALIGNED_ACCESS;
+    pub const RX_EXCP_UNDEFINED_INSTRUCTION: u32 = ZX_EXCP_UNDEFINED_INSTRUCTION;
+    pub const RX_EXCP_POLICY_ERROR: u32 = ZX_EXCP_POLICY_ERROR;
 }
 
 /// ============================================================================
@@ -144,6 +191,15 @@ pub type cpu_mask_t = u64;
 
 /// Port packet type (legacy)
 pub type rx_port_packet_t = u64;
+
+/// Port packet type (without _t suffix)
+pub type rx_port_packet = rx_port_packet_t;
+
+/// Exception report type (stub)
+#[repr(C)]
+pub struct rx_exception_report_t {
+    pub data: [u64; 8],
+}
 
 /// Interrupt count for x86 (stub)
 pub type X86_INT_COUNT = u32;

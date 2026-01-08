@@ -107,6 +107,9 @@ pub struct X86SyscallGeneralRegs {
     pub r9: u64,
 }
 
+/// General purpose registers - alias for X86SyscallGeneralRegs
+pub type X86GeneralRegs = X86SyscallGeneralRegs;
+
 /// Debug state (DR0-DR7)
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
@@ -288,5 +291,72 @@ unsafe fn x86_read_dr6() -> u64 {
         options(nomem, nostack)
     );
     dr6
+}
+
+/// ============================================================================
+/// Control Register Functions
+/// ============================================================================
+
+/// Re-export CR4_PGE for convenience
+pub use cr::CR4_PGE as X86_CR4_PGE;
+
+/// Read CR3 register (Page Directory Base)
+///
+/// # Safety
+///
+/// This function uses inline assembly to read CR3.
+#[inline]
+pub unsafe fn x86_get_cr3() -> u64 {
+    let cr3: u64;
+    core::arch::asm!(
+        "mov {}, cr3",
+        out(reg) cr3,
+        options(nomem, nostack)
+    );
+    cr3
+}
+
+/// Write CR3 register (Page Directory Base)
+///
+/// # Safety
+///
+/// This function uses inline assembly to write CR3.
+#[inline]
+pub unsafe fn x86_set_cr3(val: u64) {
+    core::arch::asm!(
+        "mov cr3, {}",
+        in(reg) val,
+        options(nomem, nostack)
+    );
+}
+
+/// Read CR4 register
+///
+/// # Safety
+///
+/// This function uses inline assembly to read CR4.
+#[inline]
+pub unsafe fn x86_get_cr4() -> u64 {
+    let cr4: u64;
+    core::arch::asm!(
+        "mov {}, cr4",
+        out(reg) cr4,
+        options(nomem, nostack)
+    );
+    cr4
+}
+
+/// Write CR4 register
+///
+/// # Safety
+///
+/// This function uses inline assembly to write CR4.
+#[inline]
+pub unsafe fn x86_set_cr4(val: u64) {
+    core::arch::asm!(
+        "mov cr4, {}",
+        in(reg) val,
+        options(nomem, nostack)
+    );
 }
 

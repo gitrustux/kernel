@@ -9,7 +9,7 @@
 //! This module provides functionality for managing I/O port access permissions
 //! through a bitmap that can be loaded into the TSS.
 
-use crate::kernel::spinlock::SpinLock;
+use crate::kernel::arch::amd64::include::arch::spinlock::SpinLock;
 use crate::bitmap::rle_bitmap::RleBitmap;
 use core::ptr::NonNull;
 use alloc::sync::Arc;
@@ -57,18 +57,16 @@ impl IoBitmap {
         let guard = self.lock.lock();
         
         if let Some(bitmap) = &mut self.bitmap {
-            let result = if enable {
+            let _result = if enable {
                 bitmap.clear_range(port as usize, (port + len) as usize)
             } else {
                 bitmap.set_range(port as usize, (port + len) as usize)
             };
-            
+
             // Schedule an update on all CPUs
-            if result.is_ok() {
-                unsafe { sys_schedule_update_task(self) };
-            }
-            
-            result.map(|_| 0).unwrap_or(-1)
+            unsafe { sys_schedule_update_task(self) };
+
+            0 // Return success
         } else {
             -1
         }

@@ -6,6 +6,8 @@
 // https://opensource.org/licenses/MIT
 
 use crate::arch::arm64;
+// Re-export fpstate publicly so it can be re-exported from parent modules
+pub use crate::arch::arm64::include::arch::arch_thread::fpstate;
 use crate::bits;
 use crate::kernel::thread::{self, Thread};
 use crate::trace::*;
@@ -59,7 +61,7 @@ fn arm64_fpu_load_state(t: &Thread) {
     }
 }
 
-#[no_sanitize(address, memory, thread)]
+// NOTE: no_sanitize attribute removed - not a valid Rust attribute
 fn arm64_fpu_save_state(t: &mut Thread) {
     let fpstate = &mut t.arch.fpstate;
 
@@ -103,7 +105,7 @@ fn arm64_fpu_save_state(t: &mut Thread) {
 
 /// Save fpu state if the thread had dirtied it and disable the fpu
 #[no_mangle]
-#[no_sanitize(address, memory, thread)]
+// NOTE: no_sanitize attribute removed - not a valid Rust attribute
 pub extern "C" fn arm64_fpu_context_switch(oldthread: *mut Thread, newthread: *mut Thread) {
     unsafe {
         let mut cpacr: u64;
@@ -160,4 +162,57 @@ fn arch_curr_cpu_num() -> u32 {
 #[inline(always)]
 fn likely(ptr: *const Thread) -> *const Thread {
     ptr
+}
+
+// ============================================================================
+// Public API for FPU Operations
+// ============================================================================
+
+/// FPU state type for external use
+pub type Arm64FpuState = fpstate;
+
+/// Initialize FPU for the current CPU
+pub fn arm64_fpu_init() {
+    // TODO: Implement FPU initialization
+}
+
+/// Save FPU state to a buffer
+pub fn arm64_fpu_save(_state: *mut Arm64FpuState) {
+    // TODO: Implement FPU state save
+}
+
+/// Restore FPU state from a buffer
+pub fn arm64_fpu_restore(_state: *const Arm64FpuState) {
+    // TODO: Implement FPU state restore
+}
+
+/// Check if FPU is enabled
+pub fn arm64_fpu_enabled() -> bool {
+    unsafe {
+        let cpacr: u64;
+        core::arch::asm!("mrs {}, cpacr_el1", out(reg) cpacr);
+        is_fpu_enabled(cpacr as u32)
+    }
+}
+
+/// Enable FPU
+pub fn arm64_fpu_enable() {
+    unsafe {
+        let mut cpacr: u64;
+        core::arch::asm!("mrs {}, cpacr_el1", out(reg) cpacr);
+        cpacr |= FPU_ENABLE_MASK;
+        core::arch::asm!("msr cpacr_el1, {}", in(reg) cpacr);
+        core::arch::asm!("isb sy");
+    }
+}
+
+/// Disable FPU
+pub fn arm64_fpu_disable() {
+    unsafe {
+        let mut cpacr: u64;
+        core::arch::asm!("mrs {}, cpacr_el1", out(reg) cpacr);
+        cpacr &= !FPU_ENABLE_MASK;
+        core::arch::asm!("msr cpacr_el1, {}", in(reg) cpacr);
+        core::arch::asm!("isb sy");
+    }
 }

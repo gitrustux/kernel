@@ -6,13 +6,21 @@
 
 use crate::arch::arm64;
 use crate::arch::arm64::registers;
-use crate::arch::debugger;
+// use crate::arch::debugger;  // Removed - this is the current module
 use crate::err;
 use crate::kernel::thread::{self, Thread};
 use crate::kernel::thread_lock::{self, ThreadLock, Guard, IrqSave};
-use crate::sys::types::*;
-use crate::rustux::syscalls::debug::*;
 use crate::rustux::types::*;
+use crate::rustux::types::err::*;
+use crate::rustux::syscalls::debug::*;
+use crate::sys::{
+    rx_thread_state_general_regs_t,
+    rx_thread_state_vector_regs_t,
+    rx_thread_state_fp_regs_t,
+    rx_thread_state_debug_regs_t,
+    rx_excp_type_t,
+    rx_vaddr_t,
+};
 
 // Only the NZCV flags (bits 31 to 28 respectively) of the CPSR are
 // readable and writable by userland on ARM64.

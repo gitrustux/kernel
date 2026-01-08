@@ -5,11 +5,10 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT
 
-use core::assert_eq;
-use crate::sys::types::*;
-use crate::syscalls::syscalls::*;
 use crate::rustux::compiler::*;
 use crate::rustux::types::*;
+use crate::rustux::types::err::*;
+use crate::kernel::thread;
 
 // Constants from ACLE section 8.3, used as the argument for __dmb(), __dsb(), and __isb()
 // in arm_acle.h. Values are the architecturally defined immediate values encoded in barrier
@@ -31,15 +30,14 @@ pub const ARM_MB_ST: u8 = 0xe;
 pub const ARM_MB_SY: u8 = 0xf;
 
 extern "C" {
-    pub fn arm64_context_switch(old_sp: *mut vaddr_t, new_sp: vaddr_t);
-    
-    #[no_return]
+    pub fn arm64_context_switch(old_sp: *mut VAddr, new_sp: VAddr);
+
     pub fn arm64_uspace_entry(
-        arg1: uintptr_t,
-        arg2: uintptr_t,
-        pc: uintptr_t,
-        sp: uintptr_t,
-        kstack: vaddr_t,
+        arg1: usize,
+        arg2: usize,
+        pc: usize,
+        sp: usize,
+        kstack: VAddr,
         spsr: u32,
         mdscr: u32,
     ) -> !;
@@ -79,6 +77,20 @@ pub struct arm64_iframe_long {
     pub pad2: [u64; 1], // Keep structure multiple of 16-bytes for stack alignment.
 }
 
+impl Default for arm64_iframe_long {
+    fn default() -> Self {
+        arm64_iframe_long {
+            r: [0; 30],
+            lr: 0,
+            usp: 0,
+            elr: 0,
+            spsr: 0,
+            mdscr: 0,
+            pad2: [0],
+        }
+    }
+}
+
 #[repr(C)]
 pub struct arm64_iframe_short {
     pub r: [u64; 20],
@@ -91,7 +103,8 @@ pub struct arm64_iframe_short {
     pub pad2: [u64; 2],
 }
 
-const _: () = assert!(core::mem::size_of::<arm64_iframe_long>() == core::mem::size_of::<arm64_iframe_short>());
+const _: () = assert!(core::mem::size_of::<arm64_iframe_long>() == core::mem::size_of::<arm64_iframe_short>(),
+    "arm64_iframe_long and arm64_iframe_short must have same size");
 
 #[repr(C)]
 pub struct arch_exception_context {
@@ -108,27 +121,27 @@ extern "C" {
     pub fn arm64_el3_to_el1();
     pub fn arm64_sync_exception(iframe: *mut arm64_iframe_long, exception_flags: u32, esr: u32);
     pub fn arm64_thread_process_pending_signals(iframe: *mut arm64_iframe_long);
-    
+
     pub fn platform_irq(frame: *mut iframe);
     pub fn platform_fiq(frame: *mut iframe);
-    
+
     /* fpu routines */
     pub fn arm64_fpu_exception(iframe: *mut arm64_iframe_long, exception_flags: u32);
-    pub fn arm64_fpu_context_switch(oldthread: *mut thread, newthread: *mut thread);
-    
+    pub fn arm64_fpu_context_switch(oldthread: *mut thread::Thread, newthread: *mut thread::Thread);
+
     pub fn arm64_get_boot_el() -> u64;
-    
+
     pub fn arm_reset();
-    
+
     /*
      * Creates a stack and sets the stack pointer for the specified secondary CPU.
      */
-    pub fn arm64_create_secondary_stack(cluster: u32, cpu: u32) -> rx_status_t;
-    
+    pub fn arm64_create_secondary_stack(cluster: u32, cpu: u32) -> Status;
+
     /*
      * Frees a stack created by |arm64_create_secondary_stack|.
      */
-    pub fn arm64_free_secondary_stack(cluster: u32, cpu: u32) -> rx_status_t;
+    pub fn arm64_free_secondary_stack(cluster: u32, cpu: u32) -> Status;
 }
 
 /* used in above exception_flags arguments */

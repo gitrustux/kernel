@@ -5,11 +5,20 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT
 
-use crate::arch::arm64::interrupt;
+use crate::arch::arm64::interrupts;
 use crate::arch::arm64::mp;
-use crate::sys::types::*;
 use crate::rustux::compiler::*;
-use crate::rustux::thread_annotations::*;
+use crate::rustux::types::*;
+use crate::rustux::types::err::*;
+
+// Module alias for compatibility with code using interrupt:: prefix
+use interrupts as interrupt;
+
+// Type aliases for C compatibility
+pub type vaddr_t = VAddr;
+pub type paddr_t = PAddr;
+pub type usize_t = usize;
+pub type ssize_t = isize;
 
 /// ARM64 spinlock implementation
 #[derive(Debug)]

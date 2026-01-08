@@ -7,6 +7,7 @@
 use crate::arch::arm64::*;
 use crate::arch::arm64::mp::*;
 use crate::debug::*;
+use crate::dprintf;
 use crate::kernel::thread::*;
 use core::ptr;
 
@@ -126,10 +127,10 @@ pub extern "C" fn arch_thread_construct_first(t: &mut Thread) {
 #[cfg_attr(feature = "safe_stack", no_safe_stack)]
 pub extern "C" fn arch_context_switch(oldthread: &mut Thread, newthread: &mut Thread) {
     if LOCAL_TRACE {
-        ltrace!("old %p (%s), new %p (%s)\n", 
-                oldthread as *mut Thread, 
-                oldthread.name.as_ptr(), 
-                newthread as *mut Thread, 
+        ltrace!("old {:p} ({:?}), new {:p} ({:?})\n",
+                oldthread as *mut Thread,
+                oldthread.name.as_ptr(),
+                newthread as *mut Thread,
                 newthread.name.as_ptr());
     }
     
@@ -156,8 +157,8 @@ pub extern "C" fn arch_context_switch(oldthread: &mut Thread, newthread: &mut Th
 /// * `t` - Thread to dump information for
 pub fn arch_dump_thread(t: &Thread) {
     if t.state != ThreadState::Running {
-        dprintf!(INFO, "\tarch: ");
-        dprintf!(INFO, "sp 0x%lx\n", t.arch.sp);
+        dprintf!(crate::kernel::debug::INFO, "\tarch: ");
+        dprintf!(crate::kernel::debug::LogLevel::Info, "sp {:#x}\n", t.arch.sp);
     }
 }
 

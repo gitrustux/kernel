@@ -407,7 +407,7 @@ pub trait ArchCpuId {
 pub trait ArchMemoryBarrier {
     /// Compiler barrier - prevents compiler reordering
     fn compiler_barrier() {
-        unsafe { core::arch::asm!("", options(nostack, nomem)); }
+        core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
     }
 
     /// Full memory barrier - loads and stores
@@ -444,15 +444,46 @@ pub trait ArchHalt {
     unsafe fn halt();
 
     /// Pause CPU (hint to CPU that we're spinning)
+    #[cfg(target_arch = "x86_64")]
+    fn pause() {
+        unsafe { core::arch::asm!("pause", options(nostack)); }
+    }
+
+    /// Pause CPU (hint to CPU that we're spinning)
+    #[cfg(target_arch = "aarch64")]
+    fn pause() {
+        unsafe { core::arch::asm!("yield", options(nostack)); }
+    }
+
+    /// Pause CPU (hint to CPU that we're spinning)
+    #[cfg(target_arch = "riscv64")]
     fn pause() {
         unsafe { core::arch::asm!("pause", options(nostack)); }
     }
 
     /// Serialize instruction execution
+    #[cfg(target_arch = "x86_64")]
     fn serialize() {
         unsafe {
             let _: u32;
             core::arch::asm!("cpuid", lateout("eax") _, options(nostack));
+        }
+    }
+
+    /// Serialize instruction execution
+    #[cfg(target_arch = "aarch64")]
+    fn serialize() {
+        unsafe {
+            core::arch::asm!("dsb sy", options(nostack));
+            core::arch::asm!("isb", options(nostack));
+        }
+    }
+
+    /// Serialize instruction execution
+    #[cfg(target_arch = "riscv64")]
+    fn serialize() {
+        unsafe {
+            core::arch::asm!("fence rw, rw", options(nostack));
         }
     }
 }

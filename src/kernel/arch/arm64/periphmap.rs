@@ -6,7 +6,7 @@
 
 use crate::arch::arm64::mmu::*;
 use crate::vm::vm::*;
-use crate::vm::vm_aspace::*;
+use crate::vm::*;
 
 const PERIPH_RANGE_MAX: usize = 4;
 
