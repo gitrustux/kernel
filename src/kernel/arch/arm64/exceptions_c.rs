@@ -83,14 +83,19 @@ fn try_dispatch_user_data_fault_exception(
         esr,
         far,
     };
-    
+
     arch_ops::arch_enable_ints();
-    debug_assert!(thread.arch.suspended_general_regs.is_null());
-    thread.arch.suspended_general_regs = iframe as *mut arm64::arm64_iframe_long;
-    let status = exception::dispatch_user_exception(type_, &mut context);
-    thread.arch.suspended_general_regs = core::ptr::null_mut();
-    arch_ops::arch_disable_ints();
-    status
+    if let Some(ref thr) = thread {
+        debug_assert!(thr.arch.suspended_general_regs.is_null());
+        thr.arch.suspended_general_regs = iframe as *mut arm64::arm64_iframe_long;
+        let status = exception::dispatch_user_exception(type_, &mut context);
+        thr.arch.suspended_general_regs = core::ptr::null_mut();
+        arch_ops::arch_disable_ints();
+        status
+    } else {
+        arch_ops::arch_disable_ints();
+        RX_ERR_NOT_FOUND
+    }
 }
 
 fn try_dispatch_user_exception(
@@ -267,9 +272,11 @@ fn arm64_data_abort_handler(iframe: &mut arm64::arm64_iframe_long, exception_fla
     // Check if the current thread was expecting a data fault and
     // we should return to its handler.
     let thr = thread::get_current_thread();
-    if !thr.arch.data_fault_resume.is_null() && vm::is_user_address(far) {
-        iframe.elr = thr.arch.data_fault_resume as usize;
-        return;
+    if let Some(ref thread) = thr {
+        if !thread.arch.data_fault_resume.is_null() && vm::is_user_address(far) {
+            iframe.elr = thread.arch.data_fault_resume as usize;
+            return;
+        }
     }
 
     // If this is from user space, let the user exception handler
@@ -301,7 +308,9 @@ fn arm64_data_abort_handler(iframe: &mut arm64::arm64_iframe_long, exception_fla
 
 #[inline]
 unsafe fn arm64_restore_percpu_pointer() {
-    arm64::arm64_write_percpu_ptr(thread::get_current_thread().arch.current_percpu_ptr);
+    if let Some(ref thread) = thread::get_current_thread() {
+        arm64::arm64_write_percpu_ptr(thread.arch.current_percpu_ptr);
+    }
 }
 
 /* called from assembly */
@@ -468,23 +477,25 @@ pub extern "C" fn arm64_invalid_exception(iframe: *mut arm64::arm64_iframe_long,
 pub extern "C" fn arm64_thread_process_pending_signals(iframe: *mut arm64::arm64_iframe_long) {
     let thread = thread::get_current_thread();
     debug_assert!(!iframe.is_null());
-    debug_assert!(thread.arch.suspended_general_regs.is_null());
+    if let Some(ref thr) = thread {
+        debug_assert!(thr.arch.suspended_general_regs.is_null());
 
-    thread.arch.suspended_general_regs = iframe;
-    thread::thread_process_pending_signals();
-    thread.arch.suspended_general_regs = core::ptr::null_mut();
+        thr.arch.suspended_general_regs = iframe;
+        thread::thread_process_pending_signals();
+        thr.arch.suspended_general_regs = core::ptr::null_mut();
+    }
 }
 
 pub fn arch_dump_exception_context(context: &exception::arch_exception_context_t) {
-    let ec = bits::BITS_SHIFT(context.esr, 31, 26);
-    let iss = bits::BITS(context.esr, 24, 0);
-    let iframe = unsafe { &*context.frame };
+    let ec = bits::BITS_SHIFT(context.esr as u32, 31, 26);
+    let iss = bits::BITS(context.esr as u32, 24, 0);
+    let iframe = unsafe { &*(context.frame as *const arm64::arm64_iframe_long) };
 
     match ec {
         0b100000 | 0b100001 => { /* instruction abort from lower level or same level */
             println!("instruction abort: PC at {:#x}, address {:#x} IFSC {:#x} {}",
                    iframe.elr, context.far,
-                   bits::BITS(context.esr, 5, 0),
+                   bits::BITS(context.esr as u32, 5, 0),
                    if bits::BIT(ec, 0) != 0 { "" } else { "user " });
         },
         0b100100 | 0b100101 => { /* data abort from lower level or same level */

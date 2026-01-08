@@ -191,17 +191,19 @@ fn print_cpu_info() {
 // Helper function for string formatting that mimics C's snprintf
 fn snprintf(buffer: &mut [u8], format_str: &str, args: impl core::fmt::Display) -> usize {
     use core::fmt::Write;
-    
+
     let mut writer = WriteToSlice { slice: buffer, offset: 0 };
     let _ = write!(&mut writer, "{}", args);
-    
+
     // Ensure null termination for C interop
-    if writer.offset < buffer.len() {
-        buffer[writer.offset] = 0;
-    } else if !buffer.is_empty() {
-        buffer[buffer.len() - 1] = 0;
+    let offset = writer.offset;
+    let len = writer.slice.len();
+    if offset < len {
+        writer.slice[offset] = 0;
+    } else if !writer.slice.is_empty() {
+        writer.slice[len - 1] = 0;
     }
-    
+
     writer.offset
 }
 

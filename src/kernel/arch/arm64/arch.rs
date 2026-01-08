@@ -116,23 +116,39 @@ pub fn arm64_create_secondary_stack(cluster: u32, cpu: u32) -> rx_status_t {
     
     unsafe {
         let thread = INIT_THREAD[cpu_num as usize - 1].assume_init_mut();
-        let stack = &mut thread.stack;
-        debug_assert!(stack.base == 0);
-        
-        let status = vm_allocate_kstack(stack);
+        let stack_mutex = &mut thread.stack;
+        debug_assert!({
+            let guard = stack_mutex.lock();
+            if let Some(ref stack) = *guard {
+                stack.base == 0
+            } else {
+                true
+            }
+        });
+
+        let status = vm_allocate_kstack(stack_mutex);
         if status != RX_OK {
             return status;
         }
 
         // Get the stack pointers.
-        let sp = stack.top as *mut core::ffi::c_void;
-        let mut unsafe_sp = core::ptr::null_mut();
-        
-        #[cfg(feature = "safe_stack")]
-        {
-            debug_assert!(stack.unsafe_base != 0);
-            unsafe_sp = (stack.unsafe_base + stack.size) as *mut core::ffi::c_void;
-        }
+        let (sp, unsafe_sp) = {
+            let guard = stack_mutex.lock();
+            if let Some(ref stack) = *guard {
+                let sp = stack.top as *mut core::ffi::c_void;
+                let mut unsafe_sp = core::ptr::null_mut();
+
+                #[cfg(feature = "safe_stack")]
+                {
+                    debug_assert!(stack.unsafe_base != 0);
+                    unsafe_sp = (stack.unsafe_base + stack.size) as *mut core::ffi::c_void;
+                }
+
+                (sp, unsafe_sp)
+            } else {
+                (core::ptr::null_mut(), core::ptr::null_mut())
+            }
+        };
 
         // Find an empty slot for the low-level stack info.
         let mut i: usize = 0;

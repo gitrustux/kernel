@@ -96,6 +96,7 @@ pub mod sys {
     #[repr(C)]
     pub struct rx_thread_state_general_regs_t {
         pub r: [u64; 30],
+        pub lr: u64,
         pub pc: u64,
         pub sp: u64,
         pub cpsr: u32,
@@ -104,10 +105,18 @@ pub mod sys {
 
     #[repr(C)]
     pub struct rx_thread_state_vector_regs_t {
-        pub q: [u128; 32],
+        pub v: [VectorReg; 32],
         pub fpsr: u32,
         pub fpcr: u32,
         pub padding: u32,
+    }
+
+    /// Vector register (split into low/high 64-bit parts)
+    #[repr(C)]
+    #[derive(Copy, Clone, Default)]
+    pub struct VectorReg {
+        pub low: u64,
+        pub high: u64,
     }
 
     #[repr(C)]
@@ -117,10 +126,21 @@ pub mod sys {
 
     #[repr(C)]
     pub struct rx_thread_state_debug_regs_t {
+        pub hw_bps_count: u32,
+        pub padding: u32,
+        pub hw_bps: [Arm64HwBreakpoint; 16],
         pub bvr: [u64; 16],
         pub bcr: [u64; 16],
         pub wvr: [u64; 16],
         pub wcr: [u64; 16],
+    }
+
+    /// ARM64 hardware breakpoint
+    #[repr(C)]
+    #[derive(Copy, Clone, Default)]
+    pub struct Arm64HwBreakpoint {
+        pub dbgbcr: u32,
+        pub dbgbvr: u64,
     }
 
     // Also re-export types directly at sys level

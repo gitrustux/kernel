@@ -56,11 +56,23 @@ pub fn arch_thread_initialize(t: &mut Thread, entry_point: vaddr_t) {
     t.arch = ArchThread::default();
 
     // create a default stack frame on the stack
-    let mut stack_top = t.stack.top;
+    let mut stack_top = {
+        let stack_guard = t.stack.lock();
+        if let Some(ref stack) = *stack_guard {
+            stack.top
+        } else {
+            0  // Fallback if no stack allocated
+        }
+    };
 
     // make sure the top of the stack is 16 byte aligned for EABI compliance
     stack_top = round_down(stack_top, 16);
-    t.stack.top = stack_top;
+    {
+        let mut stack_guard = t.stack.lock();
+        if let Some(ref mut stack) = *stack_guard {
+            stack.top = stack_top;
+        }
+    }
 
     let frame = (stack_top as *mut ContextSwitchFrame).offset(-1);
 

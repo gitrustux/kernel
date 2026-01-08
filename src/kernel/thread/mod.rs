@@ -281,13 +281,21 @@ pub struct ArchData {
     #[cfg(target_arch = "aarch64")]
     pub stack_guard: u64,
 
-    /// Unsafe stack pointer (for aarch64 with safe_stack feature)
-    #[cfg(all(target_arch = "aarch64", feature = "safe_stack"))]
+    /// Unsafe stack pointer (for aarch64)
+    #[cfg(target_arch = "aarch64")]
     pub unsafe_sp: VAddr,
 
     /// Current per-CPU pointer (for aarch64)
     #[cfg(target_arch = "aarch64")]
     pub current_percpu_ptr: *mut u8,
+
+    /// Data fault resume address (for aarch64)
+    #[cfg(target_arch = "aarch64")]
+    pub data_fault_resume: u64,
+
+    /// Thread pointer location (for aarch64)
+    #[cfg(target_arch = "aarch64")]
+    pub thread_pointer_location: u64,
 
     /// Track debug state flag (for aarch64)
     #[cfg(target_arch = "aarch64")]
@@ -344,12 +352,16 @@ impl ArchData {
             sp: 0,
             #[cfg(target_arch = "aarch64")]
             stack_guard: 0,
-            #[cfg(all(target_arch = "aarch64", feature = "safe_stack"))]
+            #[cfg(target_arch = "aarch64")]
             unsafe_sp: 0,
             #[cfg(target_arch = "aarch64")]
             current_percpu_ptr: core::ptr::null_mut(),
             #[cfg(target_arch = "aarch64")]
             track_debug_state: false,
+            #[cfg(target_arch = "aarch64")]
+            data_fault_resume: 0u64,
+            #[cfg(target_arch = "aarch64")]
+            thread_pointer_location: 0u64,
             #[cfg(target_arch = "aarch64")]
             debug_state: crate::kernel::arch::arm64::thread::Arm64DebugState::default(),
             #[cfg(target_arch = "aarch64")]

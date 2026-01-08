@@ -225,10 +225,20 @@ pub struct RiscvIframe {
 // Debug State Type
 // ============================================================================
 
+/// ARM64 hardware breakpoint
+#[repr(C)]
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Arm64HwBreakpoint {
+    pub dbgbcr: u32,
+    pub dbgbvr: u64,
+}
+
 /// ARM64 debug state (for hardware breakpoints and watchpoints)
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
 pub struct arm64_debug_state_t {
+    /// Hardware breakpoints
+    pub hw_bps: [Arm64HwBreakpoint; ARM64_MAX_HW_BREAKPOINTS],
     /// Debug breakpoint control registers
     pub bcr: [u64; ARM64_MAX_HW_BREAKPOINTS],
     /// Debug breakpoint value registers
@@ -244,6 +254,7 @@ pub struct arm64_debug_state_t {
 impl Default for arm64_debug_state_t {
     fn default() -> Self {
         Self {
+            hw_bps: [Arm64HwBreakpoint::default(); ARM64_MAX_HW_BREAKPOINTS],
             bcr: [0; ARM64_MAX_HW_BREAKPOINTS],
             bvr: [0; ARM64_MAX_HW_BREAKPOINTS],
             wcr: [0; ARM64_MAX_HW_WATCHPOINTS],

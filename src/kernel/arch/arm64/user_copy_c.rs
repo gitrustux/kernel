@@ -7,6 +7,17 @@
 use crate::kernel::thread::get_current_thread;
 use crate::vm::vm::is_user_address_range;
 
+/// Helper to get data_fault_resume pointer from current thread
+unsafe fn get_data_fault_resume_ptr() -> *mut u64 {
+    if let Some(thread) = get_current_thread() {
+        // Use Arc::make_mut to get a mutable reference if needed
+        // This is unsafe and requires the caller to ensure proper synchronization
+        core::ptr::addr_of_mut!(thread.as_ref().arch.data_fault_resume) as *mut u64
+    } else {
+        core::ptr::null_mut()
+    }
+}
+
 /// Copy data from user space to kernel space
 ///
 /// # Safety
@@ -33,11 +44,12 @@ pub unsafe extern "C" fn arch_copy_from_user(dst: *mut u8, src: *const u8, len: 
         return RX_ERR_INVALID_ARGS;
     }
 
+    let fault_resume = get_data_fault_resume_ptr();
     _arm64_user_copy(
         dst as *mut core::ffi::c_void,
         src as *const core::ffi::c_void,
         len,
-        &mut get_current_thread().arch.data_fault_resume,
+        fault_resume,
     )
 }
 
@@ -64,11 +76,12 @@ pub unsafe extern "C" fn arch_copy_to_user(dst: *mut u8, src: *const u8, len: us
         return RX_ERR_INVALID_ARGS;
     }
 
+    let fault_resume = get_data_fault_resume_ptr();
     _arm64_user_copy(
         dst as *mut core::ffi::c_void,
         src as *const core::ffi::c_void,
         len,
-        &mut get_current_thread().arch.data_fault_resume,
+        fault_resume,
     )
 }
 

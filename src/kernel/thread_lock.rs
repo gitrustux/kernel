@@ -17,14 +17,23 @@ impl ThreadLock {
     pub fn new() -> Self {
         Self
     }
+
+    /// Get the thread lock instance
+    pub fn get() -> Self {
+        Self
+    }
 }
 
 /// Lock guard
-pub struct Guard;
+pub struct Guard<T, U> {
+    _phantom: core::marker::PhantomData<(T, U)>,
+}
 
-impl Guard {
-    pub fn new() -> Self {
-        Self
+impl<T, U> Guard<T, U> {
+    pub fn new(_lock: T) -> Self {
+        Guard {
+            _phantom: core::marker::PhantomData,
+        }
     }
 }
 

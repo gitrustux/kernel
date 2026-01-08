@@ -91,13 +91,21 @@ pub fn handle_exception(info: &ExceptionInfo) {
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
 pub struct arch_exception_context_t {
-    /// Architecture-specific context data
-    pub data: [u64; 32],
+    /// Exception frame pointer
+    pub frame: *mut u8,
+    /// Exception syndrome register
+    pub esr: u64,
+    /// Fault address register
+    pub far: u64,
 }
 
 impl arch_exception_context_t {
     pub const fn new() -> Self {
-        Self { data: [0; 32] }
+        Self {
+            frame: core::ptr::null_mut(),
+            esr: 0u64,
+            far: 0u64,
+        }
     }
 }
 

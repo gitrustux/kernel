@@ -107,7 +107,7 @@ impl ArmArchVmAspace {
         // Check if the address is within the valid range for this address space
         if self.flags & ARCH_ASPACE_FLAG_KERNEL != 0 {
             // Kernel address space has a specific range
-            vaddr >= self.base && vaddr < self.base + self.size as u64
+            vaddr >= self.base && vaddr < (self.base as u64) + (self.size as u64)
         } else if self.flags & ARCH_ASPACE_FLAG_GUEST != 0 {
             // Guest address space validation
             vaddr < (1u64 << MMU_GUEST_SIZE_SHIFT)
@@ -466,7 +466,7 @@ impl AsidAllocator {
         let mut allocator = AsidAllocator {
             lock: Mutex::new(()),
             last: MMU_ARM64_FIRST_USER_ASID - 1,
-            bitmap: RawBitmapGeneric::new(FixedStorage::new())
+            bitmap: RawBitmapGeneric::from(FixedStorage::default())
         };
         allocator.bitmap.reset((MMU_ARM64_MAX_USER_ASID + 1) as usize);
         allocator
@@ -763,7 +763,7 @@ impl ArmArchVmAspace {
         }
 
         if let Some(paddr_ref) = paddr {
-            *paddr_ref = pte_addr + vaddr_rem;
+            *paddr_ref = pte_addr + (vaddr_rem as u64);
         }
         
         if let Some(mmu_flags_ref) = mmu_flags {
@@ -1021,7 +1021,7 @@ impl ArmArchVmAspace {
             chunk_size = core::cmp::min(size, (block_size - vaddr_rem) as size_t);
             index = vaddr_rel >> index_shift;
 
-            if ((vaddr_rel | paddr) & block_mask != 0) ||
+            if (((vaddr_rel as u64) | paddr) & block_mask != 0) ||
                (chunk_size != block_size as size_t) ||
                (index_shift > MMU_PTE_DESCRIPTOR_BLOCK_MAX_SHIFT) {
                 next_page_table = self.get_page_table(index, page_size_shift, page_table);
@@ -1062,7 +1062,7 @@ impl ArmArchVmAspace {
             }
             vaddr += chunk_size as vaddr_t;
             vaddr_rel += chunk_size as vaddr_t;
-            paddr += chunk_size as vaddr_t;
+            paddr += (chunk_size as vaddr_t) as u64;
             size -= chunk_size;
             mapped_size += chunk_size;
         }
@@ -1199,7 +1199,7 @@ impl ArmArchVmAspace {
             return RX_ERR_INVALID_ARGS;
         }
 
-        local_ktrace64!("mmu protect", (vaddr & !PAGE_MASK) | ((size >> PAGE_SIZE_SHIFT) & PAGE_MASK));
+        local_ktrace64!("mmu protect", ((vaddr as u64) & !PAGE_MASK) | (((size >> PAGE_SIZE_SHIFT) as u64) & PAGE_MASK));
 
         let ret = self.protect_page_table(vaddr, vaddr_rel, size, attrs,
                                        top_index_shift, page_size_shift,
@@ -1279,7 +1279,7 @@ impl ArmArchVmAspace {
             let mut page_size_shift: u32 = 0;
             self.mmu_params_from_flags(mmu_flags, Some(&mut attrs), &mut vaddr_base, &mut top_size_shift, 
                                      &mut top_index_shift, &mut page_size_shift);
-            ret = self.map_pages(vaddr, paddr, count * PAGE_SIZE,
+            ret = self.map_pages(vaddr, paddr, (count as u64) * PAGE_SIZE,
                                attrs, vaddr_base, top_size_shift,
                                top_index_shift, page_size_shift);
         }
@@ -1360,7 +1360,7 @@ impl ArmArchVmAspace {
             }
 
             if undo && idx > 0 {
-                let _ = self.unmap_pages(vaddr, idx * PAGE_SIZE, vaddr_base, top_size_shift,
+                let _ = self.unmap_pages(vaddr, (idx as u64) * PAGE_SIZE, vaddr_base, top_size_shift,
                                        top_index_shift, page_size_shift);
                 return RX_ERR_INTERNAL;
             }
@@ -1403,7 +1403,7 @@ impl ArmArchVmAspace {
             self.mmu_params_from_flags(0, None, &mut vaddr_base, &mut top_size_shift, 
                                      &mut top_index_shift, &mut page_size_shift);
 
-            ret = self.unmap_pages(vaddr, count * PAGE_SIZE,
+            ret = self.unmap_pages(vaddr, (count as u64) * PAGE_SIZE,
                                  vaddr_base, top_size_shift,
                                  top_index_shift, page_size_shift);
         }
@@ -1443,7 +1443,7 @@ impl ArmArchVmAspace {
             self.mmu_params_from_flags(mmu_flags, Some(&mut attrs), &mut vaddr_base, &mut top_size_shift, 
                                      &mut top_index_shift, &mut page_size_shift);
 
-            ret = self.protect_pages(vaddr, count * PAGE_SIZE,
+            ret = self.protect_pages(vaddr, (count as u64) * PAGE_SIZE,
                                    attrs, vaddr_base,
                                    top_size_shift, top_index_shift, page_size_shift);
         }
@@ -1460,13 +1460,13 @@ impl ArmArchVmAspace {
 
         // Validate that the base + size is sane and doesn't wrap.
         debug_assert!(size > PAGE_SIZE as size_t);
-        debug_assert!(base + size as u64 - 1 > base);
+        debug_assert!((base as u64) + (size as u64) - 1 > (base as u64));
 
         self.flags = flags;
         if flags & ARCH_ASPACE_FLAG_KERNEL != 0 {
             // At the moment we can only deal with address spaces as globally defined.
             debug_assert!(base == !0u64 << MMU_KERNEL_SIZE_SHIFT);
-            debug_assert!(size == 1 << MMU_KERNEL_SIZE_SHIFT);
+            debug_assert!(size == 1u64 << MMU_KERNEL_SIZE_SHIFT);
 
             self.base = base;
             self.size = size;
@@ -1475,9 +1475,9 @@ impl ArmArchVmAspace {
             self.asid = MMU_ARM64_GLOBAL_ASID as u16;
         } else {
             if flags & ARCH_ASPACE_FLAG_GUEST != 0 {
-                debug_assert!(base + size as u64 <= 1u64 << MMU_GUEST_SIZE_SHIFT);
+                debug_assert!((base as u64) + (size as u64) <= 1u64 << MMU_GUEST_SIZE_SHIFT);
             } else {
-                debug_assert!(base + size as u64 <= 1u64 << MMU_USER_SIZE_SHIFT);
+                debug_assert!((base as u64) + (size as u64) <= 1u64 << MMU_USER_SIZE_SHIFT);
                 if unsafe { ASID.alloc() } != RX_OK {
                     return RX_ERR_NO_MEMORY;
                 }
@@ -1511,8 +1511,8 @@ impl ArmArchVmAspace {
 pub fn arch_zero_page(ptr: *mut c_void) {
     let mut ptr_val = ptr as usize;
     let zva_size = unsafe { arm64_zva_size };
-    let end_ptr = ptr_val + PAGE_SIZE;
-    
+    let end_ptr = ptr_val + (PAGE_SIZE as usize);
+
     while ptr_val != end_ptr {
         unsafe {
             asm!("dc zva, {}", in(reg) ptr_val);
@@ -1551,7 +1551,7 @@ pub fn arm64_mmu_translate(va: vaddr_t, pa: &mut paddr_t, user: bool, write: boo
         }
 
         // physical address is stored in bits [51..12], naturally aligned
-        *pa = bits!(par, 51, 12) | (va & (PAGE_SIZE - 1));
+        *pa = bits!(par, 51, 12) | ((va as u64) & (PAGE_SIZE - 1));
     }
 
     RX_OK
@@ -1615,6 +1615,30 @@ pub struct ArmPageTable {
 impl Default for ArmPageTable {
     fn default() -> Self {
         Self { entries: [0; 512] }
+    }
+}
+
+impl ArmPageTable {
+    /// Unmap a page from the page table
+    pub fn unmap(&mut self, vaddr: usize) -> Result<(), rx_status_t> {
+        // TODO: Implement unmap
+        Ok(())
+    }
+
+    /// Change protection flags for a page
+    pub fn protect(&mut self, vaddr: usize, flags: u64) -> Result<(), rx_status_t> {
+        // TODO: Implement protect
+        Ok(())
+    }
+
+    /// Flush TLB entries
+    pub fn flush_tlb(&mut self) {
+        // TODO: Implement TLB flush
+    }
+
+    /// Get pointer to entries
+    pub fn as_ptr(&mut self) -> *mut pte_t {
+        self.entries.as_mut_ptr()
     }
 }
 

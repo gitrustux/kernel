@@ -50,6 +50,16 @@ impl<T> SpinMutex<T> {
             None
         }
     }
+
+    /// Get a raw pointer to the inner data
+    ///
+    /// # Safety
+    ///
+    /// This function is unsafe because it returns a raw pointer without
+    /// any synchronization guarantees. The caller must ensure proper access.
+    pub unsafe fn as_ptr(&self) -> *mut T {
+        self.data.get()
+    }
 }
 
 /// RAII guard for a SpinMutex

@@ -134,7 +134,17 @@ impl<T> SpinLock<T> {
             }
         }
     }
-    
+
+    /// Unlock the spinlock directly
+    ///
+    /// # Safety
+    ///
+    /// This function is unsafe because it doesn't check if the lock is held.
+    /// The caller must ensure they have exclusive access.
+    pub unsafe fn unlock(&self) {
+        arch_spin_unlock(&self.lock as *const _ as *mut _);
+    }
+
     /// Get a mutable reference to the underlying data
     ///
     /// # Safety
