@@ -261,21 +261,23 @@ qemu-system-riscv64 -M virt -m 1G \
 - `lib/fbl/*` - Fuchsia Base Library (containers, utilities)
 - `lib/ktl/*` - Kernel template library (unique_ptr, move)
 - `lib/unittest/*` - Unit test framework
-- `lib/cbuf/*` - Circular buffer implementation
-- `lib/counters/*` - Performance counters
+- `lib/cbuf/*` - Circular buffer implementation ✅ **CONVERTED** → `src/kernel/lib/cbuf.rs`
+- `lib/counters/*` - Performance counters ✅ **CONVERTED** → `src/kernel/lib/counters.rs`
 - `lib/lockdep/*` - Lock dependency tracking
 
 **Recommendation:** **Keep** - These are utility libraries that work fine as C++.
+**Note:** cbuf and counters were converted to demonstrate C++ to Rust translation patterns.
 
 ### 5.2 Infrastructure (Consider Converting)
 - `lib/crypto/*` - Cryptography, PRNG, entropy collection
 - `lib/heap/*` - Heap implementation (cmpctmalloc)
 - `lib/console/*` - Kernel console
-- `lib/debuglog/*` - Debug logging
+- `lib/debuglog/*` - Debug logging ✅ **CONVERTED** → `src/kernel/lib/debuglog.rs`
 - `lib/version/*` - Version information
 - `lib/vdso/*` - vDSO implementation
 
 **Recommendation:** **Low priority** - Could be converted to Rust, but not critical. Converting the heap would be complex due to allocator requirements.
+**Note:** debuglog was converted despite low priority due to its importance for kernel diagnostics.
 
 ### 5.3 Kernel Features (Consider Converting)
 - `lib/hypervisor/*` - Hypervisor support
@@ -359,10 +361,13 @@ qemu-system-riscv64 -M virt -m 1G \
 - `vm/vm_aspace.cpp` - Address space management (✅ Rust: `vm/aspace.rs`)
 - `vm/vmm.cpp` - VM manager
 - `vm/vm_page_request.cpp` - Page requests
+- `vm/pmm.cpp` - Physical Memory Manager ✅ **CONVERTED** → `src/kernel/vm/pmm.rs`
+- `vm/page.cpp` - Page management utilities ✅ **CONVERTED** (integrated into pmm.rs)
 - `arch/*/mmu.cpp` - Architecture-specific MMU code
 
 **Recommendation:**
 - **Already mostly converted** - `vm/aspace.rs`, `vm/page_table.rs` exist
+- **PMM converted** - Full Rust implementation with arena-based page allocation
 - **Convert remaining VM code** when needed
 - **Keep arch-specific MMU** - May need to stay as assembly/C for low-level manipulation
 
