@@ -115,6 +115,7 @@ pub struct arch_exception_context {
 
 pub type iframe_t = arm64_iframe_long;
 pub type iframe = arm64_iframe_short;
+pub type RiscvIframe = arm64_iframe_long; // Type alias for compatibility
 
 extern "C" {
     pub fn arm64_el1_exception_base();

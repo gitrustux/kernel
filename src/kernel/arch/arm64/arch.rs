@@ -84,17 +84,22 @@ macro_rules! tp_offset {
     };
 }
 
-const _: () = assert!(tp_offset!(stack_guard) == RX_TLS_STACK_GUARD_OFFSET, "");
-const _: () = assert!(tp_offset!(unsafe_sp) == RX_TLS_UNSAFE_SP_OFFSET, "");
+const _: () = assert!(tp_offset!(stack_guard) == RX_TLS_STACK_GUARD_OFFSET as isize, "");
+const _: () = assert!(tp_offset!(unsafe_sp) == RX_TLS_UNSAFE_SP_OFFSET as isize, "");
 
 // SMP boot lock
 static ARM_BOOT_CPU_LOCK: crate::arch::arm64::spinlock::SpinLock<()> = crate::arch::arm64::spinlock::SpinLock::new(());
 static mut SECONDARIES_TO_INIT: i32 = 0;
 
 // One for each secondary CPU, indexed by (cpu_num - 1)
-// Using MaybeUninit because Thread doesn't implement Copy
-static mut INIT_THREAD: [core::mem::MaybeUninit<Thread>; (SMP_MAX_CPUS - 1) as usize] =
-    [core::mem::MaybeUninit::<Thread>::uninit(); (SMP_MAX_CPUS - 1) as usize];
+// SAFETY: This is initialized before use in arm64_secondary_entry
+// We use unsafe const initialization because Thread doesn't implement Copy
+static mut INIT_THREAD: [core::mem::MaybeUninit<Thread>; (SMP_MAX_CPUS - 1) as usize] = {
+    const UNINIT: core::mem::MaybeUninit<Thread> = core::mem::MaybeUninit::<Thread>::uninit();
+    unsafe {
+        [UNINIT; (SMP_MAX_CPUS - 1) as usize]
+    }
+};
 
 // One for each CPU
 pub static mut ARM64_SECONDARY_SP_LIST: [Arm64SpInfo; SMP_MAX_CPUS as usize] =
@@ -111,7 +116,7 @@ pub fn arm64_get_boot_el() -> u64 {
 
 pub fn arm64_create_secondary_stack(cluster: u32, cpu: u32) -> rx_status_t {
     // Allocate a stack, indexed by CPU num so that |arm64_secondary_entry| can find it.
-    let cpu_num = mp::arch_mpid_to_cpu_num(cluster, cpu);
+    let cpu_num = arm64::mp::arch_mpid_to_cpu_num(cluster, cpu);
     debug_assert!(cpu_num > 0 && cpu_num < SMP_MAX_CPUS as u32);
     
     unsafe {
@@ -161,7 +166,7 @@ pub fn arm64_create_secondary_stack(cluster: u32, cpu: u32) -> rx_status_t {
         }
 
         // Store it.
-        let mpid = arm64::ARM64_MPID(cluster, cpu);
+        let mpid = arm64::ARM64_MPID!((cluster as u64), (cpu as u64));
         ltrace!("set mpid 0x{:x} sp to {:p}", mpid, sp);
         
         #[cfg(feature = "safe_stack")]
@@ -170,7 +175,7 @@ pub fn arm64_create_secondary_stack(cluster: u32, cpu: u32) -> rx_status_t {
         ARM64_SECONDARY_SP_LIST[i].mpid = mpid;
         ARM64_SECONDARY_SP_LIST[i].sp = sp;
         ARM64_SECONDARY_SP_LIST[i].stack_guard = if let Some(ct) = thread::get_current_thread() {
-            ct.arch.stack_guard
+            ct.arch.stack_guard as usize
         } else {
             0
         };
@@ -181,7 +186,7 @@ pub fn arm64_create_secondary_stack(cluster: u32, cpu: u32) -> rx_status_t {
 }
 
 pub fn arm64_free_secondary_stack(cluster: u32, cpu: u32) -> rx_status_t {
-    let cpu_num = mp::arch_mpid_to_cpu_num(cluster, cpu);
+    let cpu_num = arm64::mp::arch_mpid_to_cpu_num(cluster, cpu);
     debug_assert!(cpu_num > 0 && cpu_num < SMP_MAX_CPUS as u32);
 
     unsafe {

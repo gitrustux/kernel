@@ -52,7 +52,12 @@ impl ArchThreadContext for Arm64Arch {
         arg: usize,
         stack_top: VAddr,
     ) {
-        arm64::arch_thread_initialize(thread, entry_point, arg, stack_top);
+        arm64::arch_thread_initialize(
+            thread as *mut _ as *mut core::ffi::c_void,
+            entry_point as u64,
+            arg as u64,
+            stack_top as u64,
+        );
     }
 
     unsafe fn save_context(context: &mut Self::Context) {
@@ -61,13 +66,17 @@ impl ArchThreadContext for Arm64Arch {
 
     unsafe fn restore_context(context: &Self::Context) -> ! {
         arm64::arch_thread_context_restore(context);
+        unreachable!();
     }
 
     unsafe fn context_switch(
         old_thread: &mut crate::kernel::thread::Thread,
         new_thread: &mut crate::kernel::thread::Thread,
     ) {
-        arm64::arch_thread_context_switch(old_thread, new_thread);
+        arm64::arch_thread_context_switch(
+            &mut old_thread.arch.sp as *mut VAddr as *mut arm64::arm64_thread_context_t,
+            &new_thread.arch.sp as *const VAddr as *const arm64::arm64_thread_context_t,
+        );
     }
 
     unsafe fn current_sp() -> usize {
@@ -178,7 +187,9 @@ impl ArchMMU for Arm64Arch {
 
     unsafe fn flush_tlb_all() {
         arm64::mmu::tlb_invalidate_all();
-        arm64::mmu::tlb_invalidate_all_asid();
+        // Invalidate all ASIDs by passing a specific value or 0
+        // TODO: Determine correct ASID value to use
+        arm64::mmu::tlb_invalidate_all_asid(0);
     }
 
     unsafe fn is_valid_va(va: VAddr) -> bool {
@@ -254,7 +265,7 @@ impl ArchCpuId for Arm64Arch {
     }
 
     fn get_features() -> u64 {
-        unsafe { arm64::feature::arm64_get_features() }
+        unsafe { arm64::feature::arm64_get_features() as u64 }
     }
 }
 
@@ -289,11 +300,11 @@ impl ArchHalt for Arm64Arch {
 
 impl ArchUserAccess for Arm64Arch {
     unsafe fn copy_from_user(dst: *mut u8, src: VAddr, len: usize) -> isize {
-        arm64::user_copy_c::arm64_copy_from_user(dst, src, len)
+        arm64::user_copy_c::arm64_copy_from_user(dst, src as *const u8, len) as isize
     }
 
     unsafe fn copy_to_user(dst: VAddr, src: *const u8, len: usize) -> isize {
-        arm64::user_copy_c::arm64_copy_to_user(dst, src, len)
+        arm64::user_copy_c::arm64_copy_to_user(dst as *mut u8, src, len) as isize
     }
 
     fn is_user_address(addr: VAddr) -> bool {

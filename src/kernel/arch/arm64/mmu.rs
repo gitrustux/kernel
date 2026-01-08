@@ -281,7 +281,7 @@ pub fn paddr_to_physmap(paddr: paddr_t) -> vaddr_t {
 pub const MMU_ARM64_ASID_BITS: u32 = 16;
 pub const MMU_ARM64_GLOBAL_ASID: u32 = 0;
 pub const MMU_ARM64_FIRST_USER_ASID: u16 = 1;
-pub const MMU_ARM64_MAX_USER_ASID: u16 = (1 << MMU_ARM64_ASID_BITS) - 2;
+pub const MMU_ARM64_MAX_USER_ASID: u16 = ((1u32 << MMU_ARM64_ASID_BITS) - 2) as u16;
 pub const MMU_ARM64_UNUSED_ASID: u16 = 0;
 
 const KERNEL_BASE: u64 = 0xffffffff80000000;
@@ -1620,13 +1620,13 @@ impl Default for ArmPageTable {
 
 impl ArmPageTable {
     /// Unmap a page from the page table
-    pub fn unmap(&mut self, vaddr: usize) -> Result<(), rx_status_t> {
+    pub fn unmap(&mut self, vaddr: usize) -> Result<()> {
         // TODO: Implement unmap
         Ok(())
     }
 
     /// Change protection flags for a page
-    pub fn protect(&mut self, vaddr: usize, flags: u64) -> Result<(), rx_status_t> {
+    pub fn protect(&mut self, vaddr: usize, flags: u64) -> Result<()> {
         // TODO: Implement protect
         Ok(())
     }
