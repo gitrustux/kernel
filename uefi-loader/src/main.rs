@@ -174,32 +174,79 @@ fn load_and_start_kernel() -> uefi::Result {
 
                     uefi::system::with_stdout(|stdout| {
                         let _ = stdout.output_string(cstr16!("Kernel loaded into memory\r\n\
+Loading as EFI image...\r\n\
+"));
+                    });
+
+                    // Load and start the kernel as an EFI image using raw boot services
+                    let result = unsafe {
+                        // Get the system table and boot services
+                        let st = uefi::table::system_table_raw().expect("System table not initialized");
+                        let system_table = st.as_ref();
+                        let boot_services = system_table.boot_services;
+
+                        // Call LoadImage
+                        // EFI_STATUS LoadImage(
+                        //   IN BOOLEAN  BootPolicy,
+                        //   IN EFI_HANDLE  ParentImageHandle,
+                        //   IN EFI_DEVICE_PATH_PROTOCOL  *DevicePath,
+                        //   IN VOID  *SourceBuffer,
+                        //   IN UINTN  SourceSize,
+                        //   OUT EFI_HANDLE  *ImageHandle
+                        // );
+                        let mut kernel_handle: *mut core::ffi::c_void = core::ptr::null_mut();
+                        let load_image = (*boot_services).load_image;
+
+                        let status = load_image(
+                            false.into(),
+                            uefi::boot::image_handle().as_ptr(),
+                            core::ptr::null(),
+                            kernel_data.as_ptr(),
+                            file_size,
+                            &mut kernel_handle,
+                        );
+
+                        if status.is_success() {
+                            uefi::system::with_stdout(|stdout| {
+                                let _ = stdout.output_string(cstr16!("EFI image loaded\r\n\
 Starting kernel...\r\n\
 "));
-                    });
+                            });
 
-                    // For now, we can't directly load EFI images with uefi-rs 0.36
-                    // The LoadImage/StartImage services are not properly exposed
-                    // We need to inform the user that Phase 2 requires additional work
-                    uefi::system::with_stdout(|stdout| {
-                        let _ = stdout.output_string(cstr16!("\r\n\
-=== Phase 2 Status ===\r\n\
-EFI Image Loading: Not yet implemented\r\n\
-\r\n\
-The kernel.efi was found and loaded into memory,\r\n\
-but uefi-rs 0.36 does not provide direct access to\r\n\
-the LoadImage/StartImage boot services.\r\n\
-\r\n\
-Options:\r\n\
-1. Use raw UEFI boot services (requires unsafe code)\r\n\
-2. Wait for uefi-rs to add LoadImage support\r\n\
-3. Implement a different kernel loading mechanism\r\n\
-\r\n\
-See: /var/www/rustux.com/prod/TODO.md\r\n\
-"));
-                    });
+                            // Call StartImage
+                            // EFI_STATUS StartImage(
+                            //   IN EFI_HANDLE  ImageHandle,
+                            //   OUT UINTN  *ExitDataSize OPTIONAL,
+                            //   OUT CHAR16  **ExitData OPTIONAL
+                            // );
+                            let start_image = (*boot_services).start_image;
+                            let status = start_image(
+                                kernel_handle,
+                                core::ptr::null_mut(),
+                                core::ptr::null_mut(),
+                            );
 
-                    Err(uefi::Status::ABORTED.into())
+                            // If we get here, the kernel returned
+                            if status.is_success() {
+                                uefi::system::with_stdout(|stdout| {
+                                    let _ = stdout.output_string(cstr16!("Kernel returned unexpectedly\r\n"));
+                                });
+                                Err(uefi::Status::ABORTED)
+                            } else {
+                                uefi::system::with_stdout(|stdout| {
+                                    let _ = stdout.output_string(cstr16!("Kernel exited with error\r\n"));
+                                });
+                                Err(status)
+                            }
+                        } else {
+                            uefi::system::with_stdout(|stdout| {
+                                let _ = stdout.output_string(cstr16!("LoadImage failed\r\n"));
+                            });
+                            Err(status)
+                        }
+                    };
+
+                    result.map_err(|e| uefi::Error::from(e))
                 }
                 _ => {
                     uefi::system::with_stdout(|stdout| {

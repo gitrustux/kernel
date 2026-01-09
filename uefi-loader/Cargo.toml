@@ -6,6 +6,7 @@ authors = ["The Rustux Authors"]
 
 [dependencies]
 uefi = { version = "0.36", features = ["alloc", "logger"] }
+uefi-raw = "0.8"
 log = "0.4"
 
 [profile.release]
