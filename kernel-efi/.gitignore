@@ -1,0 +1,14 @@
+/target/
+**/*.rs.bk
+*.pdb
+Cargo.lock
+
+# EFI output
+*.efi
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
