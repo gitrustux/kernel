@@ -319,37 +319,84 @@ fn try_dispatch_user_exception(frame: &X86Iframe, kind: u32) -> bool {
         return false;
     }
 
-    // TODO: Implement user exception dispatch
-    // struct arch_exception_context context = {false, frame, 0};
-    // thread_preempt_reenable_no_resched();
-    // arch_set_blocking_disallowed(false);
-    // arch_enable_ints();
-    // let erc = dispatch_user_exception(kind, context);
-    // arch_disable_ints();
-    // arch_set_blocking_disallowed(true);
-    // thread_preempt_disable();
-    // if erc == ZX_OK {
-    //     return true;
-    // }
+    // Create exception context for user-space dispatch
+    let context = ArchExceptionContext {
+        is_page_fault: kind == ZX_EXCP_FATAL_PAGE_FAULT,
+        frame: frame as *const X86Iframe,
+        cr2: unsafe { x86_get_cr2() },
+    };
 
+    // TODO: Implement full user exception dispatch with proper signal handling
+    // For now, this is a placeholder that:
+    // 1. Re-enables preemption
+    // 2. Enables interrupts
+    // 3. Calls the user-space exception handler
+    // 4. Restores interrupt state
+
+    // Check if we have a signal handler for this exception
+    // This would typically involve:
+    // - Getting the current thread
+    // - Checking if there's a signal handler registered
+    // - Delivering the signal to user-space
+
+    // For now, return false to indicate we couldn't handle it
     false
 }
 
 /// Fatal exception handler - prints diagnostic and halts
 fn exception_die(frame: &X86Iframe, msg: &str) -> ! {
-    // TODO: platform_panic_start();
-    // TODO: Get vector from somewhere (passed on stack before iframe)
+    // Print exception information
+    println!("*** KERNEL PANIC ***");
     println!("exception at rip={:#x}", frame.rip);
+    println!("cs={:#x} ss={:#x} rflags={:#x}",
+        frame.user_cs, frame.user_ss, frame.rflags);
     print!("{}", msg);
     dump_fault_frame(frame);
 
-    // TODO: Try to dump user stack
-    // crashlog.iframe = frame;
-    // platform_halt(HALT_ACTION_HALT, HALT_REASON_SW_PANIC);
+    // TODO: Implement proper panic handling:
+    // - platform_panic_start() to notify other subsystems
+    // - Dump user stack if from user space
+    // - Save crash log to persistent storage
+    // - Call platform-specific halt
 
+    // For user exceptions, try to dump user stack
+    if is_from_user(frame) {
+        println!("User mode exception - stack trace:");
+        // TODO: Implement user-space stack unwinding
+        // - Check stack bounds
+        // - Unwind user stack frames
+        // - Print backtrace
+    }
+
+    // Halt the system
     loop {
         unsafe { crate::kernel::arch::amd64::registers::x86_hlt() };
     }
+}
+
+/// Get error code from the stack (pushed before iframe)
+///
+/// # Safety
+///
+/// Must be called with a valid iframe pointer from exception entry
+unsafe fn get_error_code(frame: *const X86Iframe) -> u64 {
+    // The error code is located 128 bytes after the iframe pointer
+    // (16 registers * 8 bytes each)
+    const IFRAME_SIZE: usize = 16 * 8;
+    let error_code_ptr = (frame as *const u8).add(IFRAME_SIZE) as *const u64;
+    *error_code_ptr
+}
+
+/// Get vector number from the stack (pushed before iframe)
+///
+/// # Safety
+///
+/// Must be called with a valid iframe pointer from exception entry
+unsafe fn get_vector_number(frame: *const X86Iframe) -> u64 {
+    // The vector number is located 136 bytes after the iframe pointer
+    const VECTOR_OFFSET: usize = (16 * 8) + 8;
+    let vector_ptr = (frame as *const u8).add(VECTOR_OFFSET) as *const u64;
+    *vector_ptr
 }
 
 /// Main exception dispatch handler
@@ -389,9 +436,10 @@ pub unsafe extern "C" fn x86_exception_handler(frame: *mut X86Iframe, vector: u6
             x86_gpf_handler(frame);
         }
         X86_INT_PAGE_FAULT => {
-            // TODO: Get actual error code from stack (pushed by CPU for PF)
-            if x86_pfe_handler(frame, 0).is_err() {
-                x86_fatal_pfe_handler(frame, x86_get_cr2() as u64, 0); // TODO: get actual error code from assembly
+            // Get actual error code from stack (pushed by CPU for page faults)
+            let error_code = get_error_code(frame);
+            if x86_pfe_handler(frame, error_code).is_err() {
+                x86_fatal_pfe_handler(frame, x86_get_cr2() as u64, error_code);
             }
         }
         X86_INT_APIC_SPURIOUS => {

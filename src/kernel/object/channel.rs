@@ -409,6 +409,7 @@ impl Channel {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use alloc::vec;
 
     #[test]
     fn test_channel_create() {

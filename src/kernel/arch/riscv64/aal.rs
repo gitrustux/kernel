@@ -30,22 +30,86 @@ pub enum Riscv64Arch {}
 
 impl ArchStartup for Riscv64Arch {
     unsafe fn early_init() {
-        // TODO: Implement RISC-V early initialization
-        println!("RISC-V: Early init");
+        // Initialize FPU (enable FS status)
+        fpu::riscv_fpu_early_init();
+
+        // Initialize CPU feature detection
+        feature::riscv_feature_init();
+
+        // Initialize basic timer access
+        // The time CSR is always accessible in supervisor mode
+
+        // Per-CPU data initialization will be handled by MP subsystem
+        // when additional harts are brought up
     }
 
     unsafe fn init_mmu() {
-        // TODO: Implement paging enable
-        println!("RISC-V: Init MMU");
+        // RISC-V MMU is enabled during early boot in boot_mmu.rs
+        // This function is called later to set up kernel address space
+
+        // Ensure page table is active
+        let satp: u64;
+        core::arch::asm!("csrr {}, satp", out(reg) satp);
+
+        // Check if MMU is enabled (mode field should be non-zero)
+        let mode = (satp >> 60) & 0xF;
+        if mode == 0 {
+            // MMU not enabled, this should not happen in normal operation
+            // since boot_mmu.rs enables it
+            panic!("RISC-V MMU not enabled in init_mmu()");
+        }
+
+        // Flush all TLBs to ensure clean state
+        mmu::tlb_flush();
     }
 
     unsafe fn init_exceptions() {
         // Exception vectors are installed in start.S
+        // The stvec CSR points to the trap handler
+
+        // Set trap vector to trap_entry (defined in start.S)
+        extern "C" {
+            fn trap_entry();
+        }
+
+        let trap_vec = trap_entry as usize as u64;
+
+        // Set stvec to direct mode (bit 1 = 0)
+        core::arch::asm!("csrw stvec, {}", in(reg) trap_vec);
+
+        // Enable supervisor external interrupts (for PLIC)
+        let mut sie: u64;
+        core::arch::asm!("csrr {}, sie", out(reg) sie);
+        sie |= 1 << 9; // SEIE - Supervisor External Interrupt Enable
+        core::arch::asm!("csrw sie, {}", in(reg) sie);
     }
 
     unsafe fn late_init() {
-        // TODO: Implement RISC-V late initialization
-        println!("RISC-V: Late init");
+        // Initialize PLIC (Platform-Level Interrupt Controller)
+        // Base address would come from device tree, for now use common QEMU address
+        const PLIC_BASE: usize = 0x0C00_0000;
+        plic::plic_init(PLIC_BASE);
+
+        // Set interrupt threshold for current hart
+        let current_hart = mp::riscv_get_cpu_num();
+        plic::plic_set_threshold(current_hart, 0); // Allow all interrupts
+
+        // Enable timer interrupts
+        let mut sie: u64;
+        core::arch::asm!("csrr {}, sie", out(reg) sie);
+        sie |= 1 << 5; // STIE - Supervisor Timer Interrupt Enable
+        core::arch::asm!("csrw sie, {}", in(reg) sie);
+
+        // Enable software interrupts (for IPIs)
+        core::arch::asm!("csrr {}, sie", out(reg) sie);
+        sie |= 1 << 1; // SSIE - Supervisor Software Interrupt Enable
+        core::arch::asm!("csrw sie, {}", in(reg) sie);
+
+        // Enable global interrupts in sstatus
+        let mut sstatus: u64;
+        core::arch::asm!("csrr {}, sstatus", out(reg) sstatus);
+        sstatus |= 1 << 1; // SIE - Supervisor Interrupt Enable
+        core::arch::asm!("csrw sstatus, {}", in(reg) sstatus);
     }
 }
 

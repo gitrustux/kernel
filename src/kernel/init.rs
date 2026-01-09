@@ -62,7 +62,7 @@ use crate::{log_debug, log_info, log_error};
 
 /// Kernel initialization state
 #[repr(u8)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd)]
 pub enum InitState {
     /// Not initialized
     NotStarted = 0,

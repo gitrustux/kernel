@@ -33,7 +33,7 @@ pub mod ops;
 pub mod page_tables;
 pub mod registers;
 pub mod smp;
-// pub mod syscalls;  // TODO: Implement syscalls module
+pub mod syscalls;
 pub mod timer;
 pub mod tsc;
 pub mod uspace_entry;

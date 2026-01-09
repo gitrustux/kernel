@@ -327,32 +327,104 @@ impl PageTable {
     }
 
     /// Map a page (wrapper for compatibility with vm::page_table API)
-    pub fn map_wrapper(&mut self, _vaddr: VAddr, _paddr: PAddr, _flags: PageTableFlags) -> VmResult<()> {
-        // TODO: Implement page table mapping
-        // This would need to walk the page table hierarchy and create entries
-        // For now, return an error to indicate unimplemented
-        Err(VmError::NoMemory)
+    pub fn map_wrapper(&mut self, vaddr: VAddr, paddr: PAddr, flags: PageTableFlags) -> VmResult<()> {
+        // Convert PageTableFlags to RISC-V PTE flags
+        let pte_flags = if flags.contains(PageTableFlags::WRITE) {
+            flags::READ | flags::WRITE | flags::VALID
+        } else if flags.contains(PageTableFlags::EXECUTE) {
+            flags::READ | flags::EXECUTE | flags::VALID
+        } else {
+            flags::READ | flags::VALID
+        };
+
+        // Add user flag if user accessible
+        if flags.contains(PageTableFlags::USER) {
+            let user_flags = pte_flags | flags::USER;
+            // Set the entry in the page table
+            let index = (vaddr >> PAGE_SHIFT) & (ENTRIES_PER_PAGE_TABLE - 1);
+            let entry = PageTableEntry::new_page(paddr, user_flags);
+            self.set_entry(index, entry);
+        } else {
+            // Kernel mapping
+            let index = (vaddr >> PAGE_SHIFT) & (ENTRIES_PER_PAGE_TABLE - 1);
+            let entry = PageTableEntry::new_page(paddr, pte_flags);
+            self.set_entry(index, entry);
+        }
+
+        // Flush TLB for this mapping
+        self.invalidate_tlb();
+        Ok(())
     }
 
     /// Unmap a page (wrapper for compatibility with vm::page_table API)
-    pub fn unmap_wrapper(&mut self, _vaddr: VAddr) -> VmResult<()> {
-        // TODO: Implement page table unmapping
-        // For now, return an error to indicate unimplemented
-        Err(VmError::NotMapped)
+    pub fn unmap_wrapper(&mut self, vaddr: VAddr) -> VmResult<()> {
+        let index = (vaddr >> PAGE_SHIFT) & (ENTRIES_PER_PAGE_TABLE - 1);
+
+        // Check if entry is present
+        let entry = self.get_entry(index);
+        if !entry.is_valid() {
+            return Err(VmError::NotMapped);
+        }
+
+        // Clear the entry
+        self.clear_entry(index);
+
+        // Flush TLB for this address
+        unsafe {
+            core::arch::asm!("sfence.vma {}", in(reg) vaddr, options(nostack));
+        }
+
+        Ok(())
     }
 
     /// Resolve a virtual address to physical address
-    pub fn resolve_wrapper(&self, _vaddr: VAddr) -> Option<PAddr> {
-        // TODO: Implement address translation
-        // For now, return None
-        None
+    pub fn resolve_wrapper(&self, vaddr: VAddr) -> Option<PAddr> {
+        let index = (vaddr >> PAGE_SHIFT) & (ENTRIES_PER_PAGE_TABLE - 1);
+        let entry = self.get_entry(index);
+
+        if entry.is_valid() && entry.is_leaf() {
+            Some(entry.paddr())
+        } else {
+            None
+        }
     }
 
     /// Update protection flags for a mapping (wrapper for compatibility)
-    pub fn protect_wrapper(&mut self, _vaddr: VAddr, _flags: PageTableFlags) -> VmResult<()> {
-        // TODO: Implement protection update
-        // For now, return an error to indicate unimplemented
-        Err(VmError::BadState)
+    pub fn protect_wrapper(&mut self, vaddr: VAddr, flags: PageTableFlags) -> VmResult<()> {
+        let index = (vaddr >> PAGE_SHIFT) & (ENTRIES_PER_PAGE_TABLE - 1);
+
+        // Get current entry
+        let mut entry = self.get_entry(index);
+
+        // Check if entry is present
+        if !entry.is_valid() {
+            return Err(VmError::NotMapped);
+        }
+
+        // Update flags while preserving physical address
+        let pte_flags = if flags.contains(PageTableFlags::WRITE) {
+            flags::READ | flags::WRITE | flags::VALID
+        } else if flags.contains(PageTableFlags::EXECUTE) {
+            flags::READ | flags::EXECUTE | flags::VALID
+        } else {
+            flags::READ | flags::VALID
+        };
+
+        let final_flags = if flags.contains(PageTableFlags::USER) {
+            pte_flags | flags::USER
+        } else {
+            pte_flags
+        };
+
+        entry.set_flags(final_flags);
+        self.set_entry(index, entry);
+
+        // Flush TLB for this address
+        unsafe {
+            core::arch::asm!("sfence.vma {}", in(reg) vaddr, options(nostack));
+        }
+
+        Ok(())
     }
 
     /// Flush TLB entries (wrapper for compatibility)

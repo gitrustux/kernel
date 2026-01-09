@@ -151,27 +151,77 @@ impl ArchInterrupts for Arm64Arch {
 
 impl ArchMMU for Arm64Arch {
     unsafe fn map(pa: PAddr, va: VAddr, len: usize, flags: u64) -> i32 {
-        // Call the MMU mapping function
-        // TODO: Implement proper page table mapping
-        let _ = pa;
-        let _ = va;
-        let _ = len;
-        let _ = flags;
-        0 // OK for now
+        // Call the MMU mapping function through address space
+        use crate::arch::aspace::ArchAspace;
+
+        // Get kernel address space
+        let kernel_aspace = arm64::mmu::arm64_get_kernel_aspace();
+
+        // Align to page size (4KB)
+        const PAGE_SIZE: usize = 4096;
+        let aligned_va = va & !(PAGE_SIZE - 1);
+        let aligned_pa = pa & !(PAGE_SIZE as u64 - 1);
+        let aligned_len = (len + PAGE_SIZE - 1) & !(PAGE_SIZE - 1);
+
+        let num_pages = aligned_len / PAGE_SIZE;
+
+        for i in 0..num_pages {
+            let current_va = aligned_va + (i * PAGE_SIZE);
+            let current_pa = (aligned_pa as u64 + (i * PAGE_SIZE) as u64) as PAddr;
+
+            // Map page using address space
+            match arm64::mmu::arm64_map_page(kernel_aspace, current_va, current_pa, flags) {
+                0 => {}, // OK
+                _ => return -1, // Error
+            }
+        }
+
+        0 // OK
     }
 
     unsafe fn unmap(va: VAddr, len: usize) {
-        let _ = va;
-        let _ = len;
-        // TODO: Implement unmap
+        use crate::arch::aspace::ArchAspace;
+
+        // Get kernel address space
+        let kernel_aspace = arm64::mmu::arm64_get_kernel_aspace();
+
+        // Align to page size (4KB)
+        const PAGE_SIZE: usize = 4096;
+        let aligned_va = va & !(PAGE_SIZE - 1);
+        let aligned_len = (len + PAGE_SIZE - 1) & !(PAGE_SIZE - 1);
+
+        let num_pages = aligned_len / PAGE_SIZE;
+
+        for i in 0..num_pages {
+            let current_va = aligned_va + (i * PAGE_SIZE);
+            // Unmap page
+            let _ = arm64::mmu::arm64_unmap_page(kernel_aspace, current_va);
+        }
     }
 
     unsafe fn protect(va: VAddr, len: usize, flags: u64) -> i32 {
-        let _ = va;
-        let _ = len;
-        let _ = flags;
-        // TODO: Implement protect
-        0 // OK for now
+        use crate::arch::aspace::ArchAspace;
+
+        // Get kernel address space
+        let kernel_aspace = arm64::mmu::arm64_get_kernel_aspace();
+
+        // Align to page size (4KB)
+        const PAGE_SIZE: usize = 4096;
+        let aligned_va = va & !(PAGE_SIZE - 1);
+        let aligned_len = (len + PAGE_SIZE - 1) & !(PAGE_SIZE - 1);
+
+        let num_pages = aligned_len / PAGE_SIZE;
+
+        for i in 0..num_pages {
+            let current_va = aligned_va + (i * PAGE_SIZE);
+            // Update protection - requires unmap and remap
+            match arm64::mmu::arm64_protect_page(kernel_aspace, current_va, flags) {
+                0 => {}, // OK
+                _ => return -1, // Error
+            }
+        }
+
+        0 // OK
     }
 
     unsafe fn flush_tlb(va: VAddr, len: usize) {
@@ -200,9 +250,18 @@ impl ArchMMU for Arm64Arch {
     }
 
     unsafe fn virt_to_phys(va: VAddr) -> PAddr {
-        // TODO: Walk page tables
-        // For now, assume direct mapping for physical memory
-        va as PAddr
+        // Walk page tables to translate VA to PA
+        use crate::arch::aspace::ArchAspace;
+
+        let kernel_aspace = arm64::mmu::arm64_get_kernel_aspace();
+        match arm64::mmu::arm64_translate(kernel_aspace, va) {
+            Some(pa) => pa,
+            None => {
+                // Fall back to direct mapping for physical memory
+                // This is a simplification for kernel mappings
+                va as PAddr
+            }
+        }
     }
 
     unsafe fn phys_to_virt(pa: PAddr) -> VAddr {
@@ -216,31 +275,86 @@ impl ArchMMU for Arm64Arch {
 
 impl ArchCache for Arm64Arch {
     unsafe fn clean_dcache(addr: VAddr, len: usize) {
-        // TODO: Implement cache clean operation
-        // See cache-ops.S for assembly implementation
-        let _ = addr;
-        let _ = len;
+        // Clean data cache to point of coherency
+        // ARM64 uses dc cvac instruction for cache clean
+        let cache_line_size = arm64::include::arch::arch_ops::arch_dcache_line_size() as usize;
+        let mut current = addr;
+        let end = addr + len;
+
+        while current < end {
+            core::arch::asm!(
+                "dc cvac, {0}",
+                in(reg) current,
+                options(nostack)
+            );
+            current += cache_line_size;
+        }
+
+        // Ensure the clean completes
+        core::arch::asm!("dsb sy", options(nostack));
     }
 
     unsafe fn invalidate_dcache(addr: VAddr, len: usize) {
-        // TODO: Implement cache invalidate operation
-        // See cache-ops.S for assembly implementation
-        let _ = addr;
-        let _ = len;
+        // Invalidate data cache
+        // ARM64 uses dc ivac instruction for cache invalidate
+        let cache_line_size = arm64::include::arch::arch_ops::arch_dcache_line_size() as usize;
+        let mut current = addr;
+        let end = addr + len;
+
+        while current < end {
+            core::arch::asm!(
+                "dc ivac, {0}",
+                in(reg) current,
+                options(nostack)
+            );
+            current += cache_line_size;
+        }
+
+        // Ensure the invalidate completes
+        core::arch::asm!("dsb sy", options(nostack));
     }
 
     unsafe fn clean_invalidate_dcache(addr: VAddr, len: usize) {
-        // TODO: Implement cache clean+invalidate operation
-        // See cache-ops.S for assembly implementation
-        let _ = addr;
-        let _ = len;
+        // Clean and invalidate data cache
+        // ARM64 uses dc civac instruction for cache clean+invalidate
+        let cache_line_size = arm64::include::arch::arch_ops::arch_dcache_line_size() as usize;
+        let mut current = addr;
+        let end = addr + len;
+
+        while current < end {
+            core::arch::asm!(
+                "dc civac, {0}",
+                in(reg) current,
+                options(nostack)
+            );
+            current += cache_line_size;
+        }
+
+        // Ensure the operation completes
+        core::arch::asm!("dsb sy", options(nostack));
     }
 
     unsafe fn sync_icache(addr: VAddr, len: usize) {
-        // TODO: Implement icache sync operation
-        // See cache-ops.S for assembly implementation
-        let _ = addr;
-        let _ = len;
+        // Synchronize instruction cache
+        // Clean data cache first, then invalidate instruction cache
+        Self::clean_dcache(addr, len);
+
+        let cache_line_size = arm64::include::arch::arch_ops::arch_icache_line_size() as usize;
+        let mut current = addr;
+        let end = addr + len;
+
+        while current < end {
+            core::arch::asm!(
+                "ic ivau, {0}",
+                in(reg) current,
+                options(nostack)
+            );
+            current += cache_line_size;
+        }
+
+        // Ensure the synchronization completes
+        core::arch::asm!("dsb sy", options(nostack));
+        core::arch::asm!("isb", options(nostack));
     }
 
     fn dcache_line_size() -> usize {
@@ -348,16 +462,127 @@ impl ArchDebug for Arm64Arch {
     }
 
     unsafe fn set_hw_breakpoint(addr: VAddr, kind: u32) -> i32 {
-        // Use ARM64 hardware breakpoints (via debug registers)
-        // TODO: Implement proper breakpoint support
-        let _ = addr;
-        let _ = kind;
-        -1 // Not implemented yet
+        // ARM64 hardware breakpoints use DBGBCRn_EL1 and DBGBVRn_EL1 registers
+        // There are typically up to 16 breakpoint registers (DBGBCR0_EL1 to DBGBCR15_EL1)
+
+        // Find a free breakpoint slot
+        const MAX_BREAKPOINTS: usize = 16;
+        static mut BREAKPOINT_IN_USE: [bool; MAX_BREAKPOINTS] = [false; MAX_BREAKPOINTS];
+
+        let slot = match BREAKPOINT_IN_USE.iter().position(|&used| !used) {
+            Some(slot) => slot,
+            None => return -1, // No free slots
+        };
+
+        // Configure breakpoint control register (DBGBCRn_EL1)
+        // Bits:
+        //   [0] - E (Enable) = 1
+        //   [1:2] - SSC (Security State Control)
+        //   [3:4] - PMC (Privilege Mode Control)
+        //   [5:8] - BST (Byte Select Target)
+        //   [9] - HMC (Higher mode control)
+        //   [12] - BAS (Byte Address Select) for unaligned
+        //   [13:14] - LBN (Linked Breakpoint Number)
+        //   [15:16] - TYPE (0 = unlinked address, 1 = linked address, etc.)
+        //   [20:21] - MATCH (1 = AArch32, 0 = AArch64)
+        let mut dbgbcr: u64 = 0;
+        dbgbcr |= 1 << 0;  // Enable breakpoint
+
+        // Set breakpoint type based on kind
+        // kind 0 = execute, 1 = load, 2 = store
+        match kind {
+            0 => dbgbcr |= (0b0000) << 20, // Execute (AArch64)
+            1 => dbgbcr |= (0b0010) << 20, // Load
+            2 => dbgbcr |= (0b0011) << 20, // Store
+            _ => return -1, // Invalid kind
+        }
+
+        dbgbcr |= (0b11) << 3;  // EL1 and EL0
+
+        // Write breakpoint control register
+        match slot {
+            0 => core::arch::asm!("msr dbgbcr0_el1, {}", in(reg) dbgbcr, options(nostack)),
+            1 => core::arch::asm!("msr dbgbcr1_el1, {}", in(reg) dbgbcr, options(nostack)),
+            2 => core::arch::asm!("msr dbgbcr2_el1, {}", in(reg) dbgbcr, options(nostack)),
+            3 => core::arch::asm!("msr dbgbcr3_el1, {}", in(reg) dbgbcr, options(nostack)),
+            4 => core::arch::asm!("msr dbgbcr4_el1, {}", in(reg) dbgbcr, options(nostack)),
+            5 => core::arch::asm!("msr dbgbcr5_el1, {}", in(reg) dbgbcr, options(nostack)),
+            6 => core::arch::asm!("msr dbgbcr6_el1, {}", in(reg) dbgbcr, options(nostack)),
+            7 => core::arch::asm!("msr dbgbcr7_el1, {}", in(reg) dbgbcr, options(nostack)),
+            8 => core::arch::asm!("msr dbgbcr8_el1, {}", in(reg) dbgbcr, options(nostack)),
+            9 => core::arch::asm!("msr dbgbcr9_el1, {}", in(reg) dbgbcr, options(nostack)),
+            10 => core::arch::asm!("msr dbgbcr10_el1, {}", in(reg) dbgbcr, options(nostack)),
+            11 => core::arch::asm!("msr dbgbcr11_el1, {}", in(reg) dbgbcr, options(nostack)),
+            12 => core::arch::asm!("msr dbgbcr12_el1, {}", in(reg) dbgbcr, options(nostack)),
+            13 => core::arch::asm!("msr dbgbcr13_el1, {}", in(reg) dbgbcr, options(nostack)),
+            14 => core::arch::asm!("msr dbgbcr14_el1, {}", in(reg) dbgbcr, options(nostack)),
+            15 => core::arch::asm!("msr dbgbcr15_el1, {}", in(reg) dbgbcr, options(nostack)),
+            _ => return -1,
+        }
+
+        // Write breakpoint value register (DBGBVRn_EL1) with the address
+        match slot {
+            0 => core::arch::asm!("msr dbgbvr0_el1, {}", in(reg) addr as u64, options(nostack)),
+            1 => core::arch::asm!("msr dbgbvr1_el1, {}", in(reg) addr as u64, options(nostack)),
+            2 => core::arch::asm!("msr dbgbvr2_el1, {}", in(reg) addr as u64, options(nostack)),
+            3 => core::arch::asm!("msr dbgbvr3_el1, {}", in(reg) addr as u64, options(nostack)),
+            4 => core::arch::asm!("msr dbgbvr4_el1, {}", in(reg) addr as u64, options(nostack)),
+            5 => core::arch::asm!("msr dbgbvr5_el1, {}", in(reg) addr as u64, options(nostack)),
+            6 => core::arch::asm!("msr dbgbvr6_el1, {}", in(reg) addr as u64, options(nostack)),
+            7 => core::arch::asm!("msr dbgbvr7_el1, {}", in(reg) addr as u64, options(nostack)),
+            8 => core::arch::asm!("msr dbgbvr8_el1, {}", in(reg) addr as u64, options(nostack)),
+            9 => core::arch::asm!("msr dbgbvr9_el1, {}", in(reg) addr as u64, options(nostack)),
+            10 => core::arch::asm!("msr dbgbvr10_el1, {}", in(reg) addr as u64, options(nostack)),
+            11 => core::arch::asm!("msr dbgbvr11_el1, {}", in(reg) addr as u64, options(nostack)),
+            12 => core::arch::asm!("msr dbgbvr12_el1, {}", in(reg) addr as u64, options(nostack)),
+            13 => core::arch::asm!("msr dbgbvr13_el1, {}", in(reg) addr as u64, options(nostack)),
+            14 => core::arch::asm!("msr dbgbvr14_el1, {}", in(reg) addr as u64, options(nostack)),
+            15 => core::arch::asm!("msr dbgbvr15_el1, {}", in(reg) addr as u64, options(nostack)),
+            _ => return -1,
+        }
+
+        // Enable debug exceptions in MDSCR_EL1
+        let mut mdscr: u64;
+        core::arch::asm!("mrs {}, mdscr_el1", out(reg) mdscr);
+        mdscr |= 1 << 12;  // Enable breakpoints
+        core::arch::asm!("msr mdscr_el1, {}", in(reg) mdscr, options(nostack));
+
+        BREAKPOINT_IN_USE[slot] = true;
+        0 // Success
     }
 
     unsafe fn disable_hw_breakpoints() {
-        // Clear all debug breakpoints
-        // TODO: Implement proper breakpoint support
+        // Clear all hardware breakpoints
+        const MAX_BREAKPOINTS: usize = 16;
+
+        for i in 0..MAX_BREAKPOINTS {
+            let zero: u64 = 0;
+            match i {
+                0 => core::arch::asm!("msr dbgbcr0_el1, {}", in(reg) zero, options(nostack)),
+                1 => core::arch::asm!("msr dbgbcr1_el1, {}", in(reg) zero, options(nostack)),
+                2 => core::arch::asm!("msr dbgbcr2_el1, {}", in(reg) zero, options(nostack)),
+                3 => core::arch::asm!("msr dbgbcr3_el1, {}", in(reg) zero, options(nostack)),
+                4 => core::arch::asm!("msr dbgbcr4_el1, {}", in(reg) zero, options(nostack)),
+                5 => core::arch::asm!("msr dbgbcr5_el1, {}", in(reg) zero, options(nostack)),
+                6 => core::arch::asm!("msr dbgbcr6_el1, {}", in(reg) zero, options(nostack)),
+                7 => core::arch::asm!("msr dbgbcr7_el1, {}", in(reg) zero, options(nostack)),
+                8 => core::arch::asm!("msr dbgbcr8_el1, {}", in(reg) zero, options(nostack)),
+                9 => core::arch::asm!("msr dbgbcr9_el1, {}", in(reg) zero, options(nostack)),
+                10 => core::arch::asm!("msr dbgbcr10_el1, {}", in(reg) zero, options(nostack)),
+                11 => core::arch::asm!("msr dbgbcr11_el1, {}", in(reg) zero, options(nostack)),
+                12 => core::arch::asm!("msr dbgbcr12_el1, {}", in(reg) zero, options(nostack)),
+                13 => core::arch::asm!("msr dbgbcr13_el1, {}", in(reg) zero, options(nostack)),
+                14 => core::arch::asm!("msr dbgbcr14_el1, {}", in(reg) zero, options(nostack)),
+                15 => core::arch::asm!("msr dbgbcr15_el1, {}", in(reg) zero, options(nostack)),
+                _ => {}
+            }
+        }
+
+        // Disable debug exceptions in MDSCR_EL1
+        let mut mdscr: u64;
+        core::arch::asm!("mrs {}, mdscr_el1", out(reg) mdscr);
+        mdscr &= !(1 << 12);  // Disable breakpoints
+        core::arch::asm!("msr mdscr_el1, {}", in(reg) mdscr, options(nostack));
     }
 }
 

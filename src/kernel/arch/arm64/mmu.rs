@@ -1780,3 +1780,62 @@ impl crate::vm::ArchPageTable for ArmPageTable {
 pub fn arm64_mmu_init() {
     // TODO: Implement MMU initialization
 }
+
+// ============================================================================
+// Helper functions for AAL MMU operations
+// ============================================================================
+
+/// Get the kernel address space
+pub fn arm64_get_kernel_aspace() -> *mut core::ffi::c_void {
+    // Return the kernel address space pointer
+    // This should be initialized during boot
+    extern "C" {
+        #[link_name = "arm64_kernel_aspace"]
+        static mut KERNEL_ASPACE: *mut core::ffi::c_void;
+    }
+    unsafe { KERNEL_ASPACE }
+}
+
+/// Map a single page in the address space
+pub fn arm64_map_page(aspace: *mut core::ffi::c_void, vaddr: VAddr, paddr: PAddr, flags: u64) -> i32 {
+    // Use the address space's map_contiguous function
+    let aspace_ref = unsafe { &mut *(aspace as *mut ArmArchVmAspace) };
+    const PAGE_SIZE: size_t = 4096;
+    match aspace_ref.map_contiguous(vaddr, paddr, 1, flags as u32, core::ptr::null_mut()) {
+        RX_OK => 0,
+        _ => -1,
+    }
+}
+
+/// Unmap a single page from the address space
+pub fn arm64_unmap_page(aspace: *mut core::ffi::c_void, vaddr: VAddr) -> i32 {
+    let aspace_ref = unsafe { &mut *(aspace as *mut ArmArchVmAspace) };
+    const PAGE_SIZE: size_t = 4096;
+    match aspace_ref.unmap(vaddr, PAGE_SIZE) {
+        RX_OK => 0,
+        _ => -1,
+    }
+}
+
+/// Change protection flags for a page
+pub fn arm64_protect_page(aspace: *mut core::ffi::c_void, vaddr: VAddr, flags: u64) -> i32 {
+    let aspace_ref = unsafe { &mut *(aspace as *mut ArmArchVmAspace) };
+    const PAGE_SIZE: size_t = 4096;
+    match aspace_ref.protect(vaddr, PAGE_SIZE, flags as u32) {
+        RX_OK => 0,
+        _ => -1,
+    }
+}
+
+/// Translate a virtual address to physical address
+pub fn arm64_translate(aspace: *mut core::ffi::c_void, vaddr: VAddr) -> Option<PAddr> {
+    // Walk the page tables to translate the address
+    // This is a simplified implementation
+    let aspace_ref = unsafe { &*(aspace as *mut ArmArchVmAspace) };
+
+    // Check if the address is mapped
+    // For now, return None to indicate translation not implemented
+    // In a full implementation, this would walk the page table hierarchy
+    let _ = aspace_ref;
+    None
+}

@@ -170,21 +170,21 @@ pub unsafe fn x86_lgdt(base: usize) {
 // I/O operations
 #[inline]
 pub unsafe fn inp(port: u16) -> u8 {
-    let mut rv: u8 = MaybeUninit::uninit().assume_init();
+    let rv: u8;
     asm!("inb dx, al", in("dx") port, out("al") rv);
     rv
 }
 
 #[inline]
 pub unsafe fn inpw(port: u16) -> u16 {
-    let mut rv: u16 = MaybeUninit::uninit().assume_init();
+    let rv: u16;
     asm!("inw dx, ax", in("dx") port, out("ax") rv);
     rv
 }
 
 #[inline]
 pub unsafe fn inpd(port: u16) -> u32 {
-    let mut rv: u32 = MaybeUninit::uninit().assume_init();
+    let rv: u32;
     asm!("inl dx, eax", in("dx") port, out("eax") rv);
     rv
 }

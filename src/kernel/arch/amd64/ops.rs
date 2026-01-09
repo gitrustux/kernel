@@ -246,11 +246,9 @@ pub unsafe fn x86_monitor<T>(addr: *const T, extensions: u32, hints: u32) {
 /// # Safety
 ///
 /// addr must be a valid memory address
-pub fn x86_mwait_simple<T>(addr: *const T) {
-    unsafe {
-        x86_monitor(addr, 0, 0);
-        x86_mwait(addr, 0, 0);
-    }
+pub unsafe fn x86_mwait_simple<T>(addr: *const T) {
+    x86_monitor(addr, 0, 0);
+    x86_mwait(addr, 0, 0);
 }
 
 /// Check if MONITOR/MWAIT is supported

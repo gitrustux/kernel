@@ -95,6 +95,12 @@ static inline void sfence(void) {
 #define X86_MSR_CSTAR             0xC0000083
 #define X86_MSR_FMASK             0xC0000084
 #define X86_MSR_TSC_AUX           0xC0000103
+#define X86_MSR_IA32_PAT          0x277
+#define X86_MSR_IA32_MTRR_CAP     0x0FE
+#define X86_MSR_IA32_MTRR_DEF     0x2FF
+
+/* Default PAT value: write-back caching for all entries */
+#define X86_PAT_DEFAULT_VALUE     0x0007010600070106ULL
 
 /* ============ Page Table Functions ============ */
 
@@ -294,15 +300,50 @@ void sys_x86_tsc_store_adjustment(void) {
 /* ============ MMU Init Functions ============ */
 
 void sys_x86_mmu_early_init(void) {
-    /* Early MMU initialization is done in assembly */
+    /*
+     * Early MMU initialization:
+     * - Set up PAT (Page Attribute Table) for proper memory caching
+     * - Enable write-protect in CR0 to protect kernel code
+     */
+    uint64_t cr0;
+
+    /* Initialize PAT MSR with default value (write-back caching) */
+    wrmsr(X86_MSR_IA32_PAT, X86_PAT_DEFAULT_VALUE);
+
+    /* Enable write-protect (CR0.WP) to protect kernel code from modification */
+    __asm__ volatile("mov %%cr0, %0" : "=r"(cr0));
+    cr0 |= (1ULL << 16);  /* Set WP bit (bit 16) */
+    __asm__ volatile("mov %0, %%cr0" : : "r"(cr0));
 }
 
 void sys_x86_mmu_percpu_init(void) {
-    /* Per-CPU MMU initialization */
+    /*
+     * Per-CPU MMU initialization:
+     * - Set up PAT for this CPU
+     * - Initialize MTRR if supported
+     */
+    uint64_t mtrr_cap;
+
+    /* Initialize PAT MSR with default value */
+    wrmsr(X86_MSR_IA32_PAT, X86_PAT_DEFAULT_VALUE);
+
+    /* Check if MTRR is supported */
+    mtrr_cap = rdmsr(X86_MSR_IA32_MTRR_CAP);
+    if (mtrr_cap & 0x400) {  /* MTRR enabled bit */
+        /* For now, use BIOS defaults */
+        /* TODO: Implement proper MTRR initialization */
+    }
 }
 
 void sys_x86_mmu_init(void) {
-    /* Main MMU initialization */
+    /*
+     * Main MMU initialization:
+     * - Called after VM subsystem is up
+     * - Set up large page support detection
+     * - Synchronize PAT across all CPUs
+     */
+    /* Placeholder for future initialization */
+    /* The bootloader has already set up basic page tables */
 }
 
 /* ============ TLB Flush Functions ============ */
@@ -593,12 +634,46 @@ int32_t sys_x86_arch_vm_aspace_context_switch(void *from_aspace, void *to_aspace
 /* ============ PAT/Memory Type Functions ============ */
 
 void sys_x86_mmu_mem_type_init(void) {
-    /* Initialize Page Attribute Table */
+    /*
+     * Initialize memory types (PAT/MTRR):
+     * - PAT is already set up in mmu_percpu_init
+     * - This function can be used for additional MTRR configuration
+     */
+    uint64_t mtrr_def_type;
+
+    /* Check and configure default MTRR type if supported */
+    mtrr_def_type = rdmsr(X86_MSR_IA32_MTRR_DEF);
+
+    /* If MTRR is enabled, set default type to write-back */
+    if (mtrr_def_type & 0x800) {  /* MTRR enable bit */
+        /* Set default type to 6 (write-back) */
+        mtrr_def_type = (mtrr_def_type & ~0xFFULL) | 0x06;
+        wrmsr(X86_MSR_IA32_MTRR_DEF, mtrr_def_type);
+    }
 }
 
 void sys_x86_pat_sync(uint64_t targets) {
-    (void)targets;
-    /* Sync PAT configuration across CPUs */
+    /*
+     * Sync PAT configuration across CPUs:
+     * - Read current PAT value from this CPU
+     * - Send IPIs to other CPUs to update their PAT
+     * - For single-CPU systems, this is a no-op
+     */
+    uint64_t current_pat;
+
+    if (targets == 1) {
+        /* Single CPU - no synchronization needed */
+        return;
+    }
+
+    /* Read current PAT value */
+    current_pat = rdmsr(X86_MSR_IA32_PAT);
+
+    /*
+     * TODO: Implement IPI-based synchronization for SMP
+     * For now, all CPUs should have the same PAT value from boot
+     */
+    (void)current_pat;  /* Suppress unused warning */
 }
 
 /* ============ Processor Trace Functions ============ */

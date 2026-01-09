@@ -139,16 +139,60 @@ impl ArchInterrupts for Amd64Arch {
 const PAGE_SIZE_MMU: usize = 4096;
 const PAGE_MASK_MMU: usize = 4095; // 0xFFF
 
+// Page table indices calculation helpers
+#[inline]
+fn pml4_index(va: VAddr) -> usize {
+    (va >> 39) & 0x1FF
+}
+
+#[inline]
+fn pdp_index(va: VAddr) -> usize {
+    (va >> 30) & 0x1FF
+}
+
+#[inline]
+fn pd_index(va: VAddr) -> usize {
+    (va >> 21) & 0x1FF
+}
+
+#[inline]
+fn pt_index(va: VAddr) -> usize {
+    (va >> 12) & 0x1FF
+}
+
+// Convert high-level flags to PTE flags
+fn flags_to_pte_flags(flags: u64) -> u64 {
+    use crate::kernel::arch::amd64::page_tables::mmu_flags::*;
+
+    let mut pte_flags = X86_MMU_PG_P; // Present
+
+    // Write permission
+    if flags & 0x2 != 0 {
+        pte_flags |= X86_MMU_PG_W;
+    }
+
+    // User permission
+    if flags & 0x4 != 0 {
+        pte_flags |= X86_MMU_PG_U;
+    }
+
+    // Global flag for kernel mappings
+    if flags & 0x1 == 0 {
+        // Kernel mapping
+        pte_flags |= X86_MMU_PG_G;
+    }
+
+    // No-execute flag
+    if flags & (1 << 63) != 0 {
+        pte_flags |= X86_MMU_PG_NX;
+    }
+
+    pte_flags
+}
+
 impl ArchMMU for Amd64Arch {
     unsafe fn map(pa: PAddr, va: VAddr, len: usize, flags: u64) -> i32 {
-        use crate::kernel::arch::amd64::page_tables::constants::*;
-
-        // Page table entry flags
-        const PTE_P: u64 = 0x001;  // Present
-        const PTE_W: u64 = 0x002;  // Read/Write
-        const PTE_U: u64 = 0x004;  // User
-        const PTE_G: u64 = 0x100;  // Global
-        const PTE_PS: u64 = 0x080; // Page size (1=2MB)
+        use crate::kernel::arch::amd64::page_tables::mmu_flags::*;
 
         // Align addresses to page boundaries
         let aligned_pa = pa & !(PAGE_MASK_MMU as PAddr);
@@ -160,35 +204,137 @@ impl ArchMMU for Amd64Arch {
         // Get current CR3 (page table base)
         let cr3 = amd64::mmu::read_cr3();
 
-        // For simplicity, we use 2MB pages when possible
-        // This is a simplified implementation - a full kernel would:
-        // 1. Walk the page tables
-        // 2. Create missing intermediate tables
-        // 3. Map each page with proper flags
+        // Convert high-level flags to PTE flags
+        let pte_flags = flags_to_pte_flags(flags);
 
-        // Placeholder: Assume identity mapping works for now
-        // TODO: Implement full page table walk
-        let _ = cr3;
-        let _ = aligned_pa;
-        let _ = aligned_va;
-        let _ = num_pages;
-        let _ = flags;
-        let _ = PTE_P | PTE_W | PTE_G | PTE_PS;
+        // For each page to map
+        for i in 0..num_pages {
+            let current_va = aligned_va + (i * PAGE_SIZE_MMU);
+            let current_pa = (aligned_pa as u64 + (i * PAGE_SIZE_MMU) as u64) as PAddr;
 
-        0 // OK for now
+            // Walk the page tables
+            let pml4 = cr3 as *mut u64;
+
+            // PML4 entry
+            let pml4_idx = pml4_index(current_va);
+            let pml4_entry = *pml4.add(pml4_idx);
+
+            if pml4_entry & X86_MMU_PG_P == 0 {
+                // PML4 entry not present - need to allocate PDP table
+                // For now, fail with error
+                return -1; // RX_ERR_NO_MEMORY
+            }
+
+            // Get PDP table
+            let pdp = ((pml4_entry & X86_PG_FRAME) as VAddr) as *mut u64;
+            let pdp_idx = pdp_index(current_va);
+            let pdp_entry = *pdp.add(pdp_idx);
+
+            let pd: *mut u64;
+            if pdp_entry & X86_MMU_PG_P == 0 {
+                // PDP entry not present - need to allocate PD table
+                // For now, fail with error
+                return -1;
+            }
+
+            // Check if this is a 1GB huge page
+            if pdp_entry & X86_MMU_PG_PS != 0 {
+                // Already a huge page, skip for now
+                continue;
+            }
+
+            pd = ((pdp_entry & X86_PG_FRAME) as VAddr) as *mut u64;
+            let pd_idx = pd_index(current_va);
+            let pd_entry = *pd.add(pd_idx);
+
+            let pt: *mut u64;
+            if pd_entry & X86_MMU_PG_P == 0 {
+                // PD entry not present - need to allocate PT table
+                // For now, fail with error
+                return -1;
+            }
+
+            // Check if this is a 2MB large page
+            if pd_entry & X86_MMU_PG_PS != 0 {
+                // Already a large page, skip for now
+                continue;
+            }
+
+            pt = ((pd_entry & X86_PG_FRAME) as VAddr) as *mut u64;
+            let pt_idx = pt_index(current_va);
+
+            // Set the PTE
+            let new_pte = (current_pa & X86_PG_FRAME as PAddr) as u64 | pte_flags;
+            *pt.add(pt_idx) = new_pte;
+        }
+
+        // Flush TLB for the mapped range
+        amd64::mmu::x86_tlb_invalidate_page(aligned_va);
+
+        0 // OK
     }
 
     unsafe fn unmap(va: VAddr, len: usize) {
+        use crate::kernel::arch::amd64::page_tables::mmu_flags::*;
+
         // Align to page boundary
         let aligned_va = va & !PAGE_MASK_MMU;
         let num_pages = (len + PAGE_MASK_MMU) / PAGE_SIZE_MMU;
+
+        // Get current CR3 (page table base)
+        let cr3 = amd64::mmu::read_cr3();
 
         // For each page, clear the present bit
         for i in 0..num_pages {
             let vaddr = aligned_va + (i * PAGE_SIZE_MMU);
 
-            // TODO: Walk page tables and clear present bit
-            let _ = vaddr;
+            // Walk the page tables
+            let pml4 = cr3 as *mut u64;
+
+            // PML4 entry
+            let pml4_idx = pml4_index(vaddr);
+            let pml4_entry = *pml4.add(pml4_idx);
+
+            if pml4_entry & X86_MMU_PG_P == 0 {
+                continue; // Not mapped
+            }
+
+            // Get PDP table
+            let pdp = ((pml4_entry & X86_PG_FRAME) as VAddr) as *mut u64;
+            let pdp_idx = pdp_index(vaddr);
+            let pdp_entry = *pdp.add(pdp_idx);
+
+            if pdp_entry & X86_MMU_PG_P == 0 {
+                continue; // Not mapped
+            }
+
+            // Get PD table
+            let pd = ((pdp_entry & X86_PG_FRAME) as VAddr) as *mut u64;
+            let pd_idx = pd_index(vaddr);
+            let pd_entry = *pd.add(pd_idx);
+
+            if pd_entry & X86_MMU_PG_P == 0 {
+                continue; // Not mapped
+            }
+
+            // Check if this is a large page
+            if pd_entry & X86_MMU_PG_PS != 0 {
+                // 2MB large page - unmap the whole thing
+                *pd.add(pd_idx) = 0;
+                continue;
+            }
+
+            // Get PT table
+            let pt = ((pd_entry & X86_PG_FRAME) as VAddr) as *mut u64;
+            let pt_idx = pt_index(vaddr);
+            let pt_entry = *pt.add(pt_idx);
+
+            if pt_entry & X86_MMU_PG_P == 0 {
+                continue; // Not mapped
+            }
+
+            // Clear the PTE
+            *pt.add(pt_idx) = 0;
         }
 
         // Flush TLB to ensure changes take effect
@@ -196,19 +342,71 @@ impl ArchMMU for Amd64Arch {
     }
 
     unsafe fn protect(va: VAddr, len: usize, flags: u64) -> i32 {
+        use crate::kernel::arch::amd64::page_tables::mmu_flags::*;
+
         // Align to page boundary
         let aligned_va = va & !PAGE_MASK_MMU;
         let num_pages = (len + PAGE_MASK_MMU) / PAGE_SIZE_MMU;
 
         // Convert high-level flags to PTE flags
-        let _ = flags;
+        let pte_flags = flags_to_pte_flags(flags);
+
+        // Get current CR3 (page table base)
+        let cr3 = amd64::mmu::read_cr3();
 
         // For each page, update the protection flags
         for i in 0..num_pages {
             let vaddr = aligned_va + (i * PAGE_SIZE_MMU);
 
-            // TODO: Walk page tables and update flags
-            let _ = vaddr;
+            // Walk the page tables
+            let pml4 = cr3 as *mut u64;
+
+            // PML4 entry
+            let pml4_idx = pml4_index(vaddr);
+            let pml4_entry = *pml4.add(pml4_idx);
+
+            if pml4_entry & X86_MMU_PG_P == 0 {
+                continue; // Not mapped
+            }
+
+            // Get PDP table
+            let pdp = ((pml4_entry & X86_PG_FRAME) as VAddr) as *mut u64;
+            let pdp_idx = pdp_index(vaddr);
+            let pdp_entry = *pdp.add(pdp_idx);
+
+            if pdp_entry & X86_MMU_PG_P == 0 {
+                continue; // Not mapped
+            }
+
+            // Get PD table
+            let pd = ((pdp_entry & X86_PG_FRAME) as VAddr) as *mut u64;
+            let pd_idx = pd_index(vaddr);
+            let pd_entry = *pd.add(pd_idx);
+
+            if pd_entry & X86_MMU_PG_P == 0 {
+                continue; // Not mapped
+            }
+
+            // Check if this is a large page
+            if pd_entry & X86_MMU_PG_PS != 0 {
+                // 2MB large page - update protection
+                let new_entry = (pd_entry & X86_LARGE_PAGE_FRAME) | pte_flags | X86_MMU_PG_PS;
+                *pd.add(pd_idx) = new_entry;
+                continue;
+            }
+
+            // Get PT table
+            let pt = ((pd_entry & X86_PG_FRAME) as VAddr) as *mut u64;
+            let pt_idx = pt_index(vaddr);
+            let pt_entry = *pt.add(pt_idx);
+
+            if pt_entry & X86_MMU_PG_P == 0 {
+                continue; // Not mapped
+            }
+
+            // Update the PTE flags (preserve physical address)
+            let new_pte = (pt_entry & X86_PG_FRAME) | pte_flags;
+            *pt.add(pt_idx) = new_pte;
         }
 
         // Flush TLB to ensure changes take effect
@@ -420,21 +618,111 @@ impl ArchUserEntry for Amd64Arch {
 
 // ============= ArchDebug Implementation =============
 
+// Debug register indices
+const DR0: usize = 0;
+const DR1: usize = 1;
+const DR2: usize = 2;
+const DR3: usize = 3;
+const DR6: usize = 6;
+const DR7: usize = 7;
+
+// Breakpoint kinds
+const BP_KIND_EXECUTE: u32 = 0;
+const BP_KIND_WRITE: u32 = 1;
+const BP_KIND_IO_READ_WRITE: u32 = 2;
+const BP_KIND_READ_WRITE: u32 = 3;
+
+// Maximum number of hardware breakpoints (x86-64 supports 4)
+const MAX_HW_BREAKPOINTS: usize = 4;
+
+// Track which breakpoint slots are in use
+static mut HW_BREAKPOINT_IN_USE: [bool; MAX_HW_BREAKPOINTS] = [false; MAX_HW_BREAKPOINTS];
+
 impl ArchDebug for Amd64Arch {
     fn read_perf_counter() -> u64 {
         amd64::asm::rdtsc()
     }
 
     unsafe fn set_hw_breakpoint(addr: VAddr, kind: u32) -> i32 {
-        // Use x86 debug registers (DR0-DR3, DR7)
-        // TODO: Implement proper breakpoint support
-        let _ = addr;
-        let _ = kind;
-        -1 // Not implemented yet
+        // Find an available breakpoint slot
+        let slot = match HW_BREAKPOINT_IN_USE.iter().position(|&used| !used) {
+            Some(slot) => slot,
+            None => return -1, // No available breakpoint slots
+        };
+
+        // Configure breakpoint in DR7
+        // DR7 layout:
+        // - Bits 0-1: L0/G0 (local/global enable for DR0)
+        // - Bits 2-3: L1/G1 (local/global enable for DR1)
+        // - Bits 4-5: L2/G2 (local/global enable for DR2)
+        // - Bits 6-7: L3/G3 (local/global enable for DR3)
+        // - Bits 16-17: R/W0 (read/write for DR0)
+        // - Bits 18-19: R/W1 (read/write for DR1)
+        // - Bits 20-21: R/W2 (read/write for DR2)
+        // - Bits 22-23: R/W3 (read/write for DR3)
+        // - Bits 24-25: LEN0 (length for DR0)
+        // - Bits 26-27: LEN1 (length for DR1)
+        // - Bits 28-29: LEN2 (length for DR2)
+        // - Bits 30-31: LEN3 (length for DR3)
+
+        let mut dr7: u64;
+        core::arch::asm!("mov %%dr7, {}", out(reg) dr7, options(nomem));
+
+        // Set breakpoint address in DR0-DR3
+        let dr_reg = match slot {
+            0 => 0,
+            1 => 1,
+            2 => 2,
+            3 => 3,
+            _ => return -1,
+        };
+
+        // Write breakpoint address
+        match dr_reg {
+            0 => core::arch::asm!("mov {}, %%dr0", in(reg) addr as u64, options(nostack)),
+            1 => core::arch::asm!("mov {}, %%dr1", in(reg) addr as u64, options(nostack)),
+            2 => core::arch::asm!("mov {}, %%dr2", in(reg) addr as u64, options(nostack)),
+            3 => core::arch::asm!("mov {}, %%dr3", in(reg) addr as u64, options(nostack)),
+            _ => unreachable!(),
+        }
+
+        // Set breakpoint type (R/W field)
+        let rw_bits = match kind {
+            BP_KIND_EXECUTE => 0b00,  // Execute
+            BP_KIND_WRITE => 0b01,    // Write
+            BP_KIND_IO_READ_WRITE => 0b10,  // I/O read/write
+            BP_KIND_READ_WRITE => 0b11,    // Read/write
+            _ => 0b00,  // Default to execute
+        };
+
+        // Set length to 1 byte (bits 00 = 1 byte)
+        // Other options: 01 = 2 bytes, 10 = 8 bytes, 11 = 4 bytes
+        let len_bits = 0b00;
+
+        // Enable breakpoint (set local enable bit)
+        dr7 |= 1 << (slot * 2);  // Set L0-L3
+        dr7 &= !(0b11 << (16 + slot * 4));  // Clear R/W field
+        dr7 |= (rw_bits as u64) << (16 + slot * 4);  // Set R/W field
+        dr7 &= !(0b11 << (24 + slot * 4));  // Clear LEN field
+        dr7 |= (len_bits as u64) << (24 + slot * 4);  // Set LEN field
+
+        // Write DR7 to enable the breakpoint
+        core::arch::asm!("mov {}, %%dr7", in(reg) dr7, options(nostack));
+
+        // Mark slot as in use
+        HW_BREAKPOINT_IN_USE[slot] = true;
+
+        0 // Success
     }
 
     unsafe fn disable_hw_breakpoints() {
-        amd64::debugger::x86_disable_debug_state();
+        // Clear all breakpoints by writing 0 to DR7
+        core::arch::asm!("mov {}, %%dr7", in(reg) 0u64, options(nostack));
+
+        // Mark all slots as available
+        for slot in HW_BREAKPOINT_IN_USE.iter_mut() {
+            *slot = false;
+        }
     }
 }
 

@@ -533,24 +533,25 @@ pub fn mp_hotplug_cpu_mask(cpu_mask: CpuMask) -> Result {
     }
 
     // Bring up each CPU
-    let mut mask = cpu_mask;
-    while mask != 0 {
-        let cpu_id = highest_cpu_set(mask);
-        mask &= !cpu_num_to_mask(cpu_id);
+    #[cfg(target_arch = "aarch64")]
+    {
+        let mut mask = cpu_mask;
+        while mask != 0 {
+            let cpu_id = highest_cpu_set(mask);
+            mask &= !cpu_num_to_mask(cpu_id);
 
-        // Call platform-specific hotplug
-        #[cfg(target_arch = "aarch64")]
-        {
+            // Call platform-specific hotplug
             let result = crate::arch::arm64::mp::arm64_mp_cpu_hotplug(cpu_id);
             if result != RX_OK {
                 return Err(result);
             }
         }
+    }
 
-        #[cfg(not(target_arch = "aarch64"))]
-        {
-            return Err(RX_ERR_NOT_SUPPORTED);
-        }
+    #[cfg(not(target_arch = "aarch64"))]
+    {
+        let _ = cpu_mask; // Suppress unused warning
+        return Err(RX_ERR_NOT_SUPPORTED);
     }
 
     Ok(())
@@ -576,32 +577,33 @@ pub fn mp_unplug_cpu_mask(cpu_mask: CpuMask) -> Result {
     }
 
     // Take down each CPU
-    let mut mask = cpu_mask;
-    while mask != 0 {
-        let cpu_id = highest_cpu_set(mask);
-        mask &= !cpu_num_to_mask(cpu_id);
+    #[cfg(target_arch = "aarch64")]
+    {
+        let mut mask = cpu_mask;
+        while mask != 0 {
+            let cpu_id = highest_cpu_set(mask);
+            mask &= !cpu_num_to_mask(cpu_id);
 
-        // Shutdown DPCs for this CPU
-        crate::kernel::dpc::dpc_shutdown_cpu(cpu_id);
+            // Shutdown DPCs for this CPU
+            crate::kernel::dpc::dpc_shutdown_cpu(cpu_id);
 
-        // Call platform-specific unplug
-        #[cfg(target_arch = "aarch64")]
-        {
+            // Call platform-specific unplug
             let result = crate::arch::arm64::mp::arm64_mp_cpu_unplug(cpu_id);
             if result != RX_OK {
                 return Err(result);
             }
-        }
 
-        #[cfg(not(target_arch = "aarch64"))]
-        {
-            return Err(RX_ERR_NOT_SUPPORTED);
+            // Mark CPU as offline
+            unsafe {
+                get_state().online_cpus.fetch_and(!cpu_num_to_mask(cpu_id), Ordering::Release);
+            }
         }
+    }
 
-        // Mark CPU as offline
-        unsafe {
-            get_state().online_cpus.fetch_and(!cpu_num_to_mask(cpu_id), Ordering::Release);
-        }
+    #[cfg(not(target_arch = "aarch64"))]
+    {
+        let _ = cpu_mask; // Suppress unused warning
+        return Err(RX_ERR_NOT_SUPPORTED);
     }
 
     Ok(())

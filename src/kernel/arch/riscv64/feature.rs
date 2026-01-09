@@ -61,3 +61,11 @@ pub fn riscv_get_features() -> u64 {
 pub fn has_extension(ext: u64) -> bool {
     unsafe { (riscv_features as u64) & ext != 0 }
 }
+
+/// Initialize CPU features (called during boot)
+///
+/// This function is called during early initialization to detect
+/// and record the available CPU extensions.
+pub fn riscv_feature_init() {
+    riscv_feature_early_detect();
+}

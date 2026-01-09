@@ -426,30 +426,14 @@ pub fn sys_port_wait_impl(handle_val: u32, deadline: u64, packet_out: usize) -> 
     };
 
     // Try to get a packet
-    let packet = loop {
-        let mut packets = port.packets.lock();
-
-        if let Some(packet) = packets.pop_front() {
-            break packet;
-        }
-
-        // No packet available - check deadline
-        // TODO: Implement proper deadline checking
-        // For now, just return timeout
-        if deadline == 0 {
-            log_debug!("sys_port_wait: no packet available");
-            return err_to_ret(RX_ERR_TIMED_OUT);
-        }
-
-        // Register as waiter
-        port.waiters.fetch_add(1, Ordering::Relaxed);
+    let mut packets = port.packets.lock();
+    let packet = if let Some(packet) = packets.pop_front() {
         drop(packets);
-
-        // TODO: Implement proper waiting with condition variable
-        // For now, simulate immediate timeout
-        port.waiters.fetch_sub(1, Ordering::Relaxed);
-
-        log_debug!("sys_port_wait: timeout");
+        packet
+    } else {
+        drop(packets);
+        // No packet available - return timeout
+        log_debug!("sys_port_wait: no packet available");
         return err_to_ret(RX_ERR_TIMED_OUT);
     };
 

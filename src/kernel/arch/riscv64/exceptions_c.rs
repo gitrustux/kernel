@@ -14,7 +14,88 @@ use crate::arch::riscv64::registers::csr;
 use crate::arch::riscv64::registers::scause;
 use crate::debug;
 use crate::kernel::thread;
+use crate::print;
 use crate::rustux::types::*;
+
+/// System call numbers
+///
+/// These match the Linux RISC-V system call numbering for compatibility
+pub mod syscall_nr {
+    pub const SYS_READ: usize = 63;
+    pub const SYS_WRITE: usize = 64;
+    pub const SYS_OPEN: usize = 1024;
+    pub const SYS_CLOSE: usize = 57;
+    pub const SYS_STAT: usize = 1038;
+    pub const SYS_FSTAT: usize = 80;
+    pub const SYS_POLL: usize = 83;
+    pub const SYS_MMAP: usize = 222;
+    pub const SYS_MPROTECT: usize = 226;
+    pub const SYS_MUNMAP: usize = 215;
+    pub const SYS_BRK: usize = 214;
+    pub const SYS_RT_SIGACTION: usize = 135;
+    pub const SYS_RT_SIGPROCMASK: usize = 136;
+    pub const SYS_IOCTL: usize = 29;
+    pub const SYS_PREAD64: usize = 67;
+    pub const SYS_PWRITE64: usize = 68;
+    pub const SYS_READV: usize = 66;
+    pub const SYS_WRITEV: usize = 65;
+    pub const SYS_ACCESS: usize = 1033;
+    pub const SYS_PIPE: usize = 59;
+    pub const SYS_SELECT: usize = 52;
+    pub const SYS_SCHED_YIELD: usize = 124;
+    pub const SYS_MREMAP: usize = 216;
+    pub const SYS_MSYNC: usize = 227;
+    pub const SYS_MINCORE: usize = 232;
+    pub const SYS_MADVISE: usize = 233;
+    pub const SYS_SHMGET: usize = 194;
+    pub const SYS_SHMAT: usize = 30;
+    pub const SYS_SHMCTL: usize = 31;
+    pub const SYS_DUP: usize = 23;
+    pub const SYS_DUP2: usize = 24;
+    pub const SYS_PAUSE: usize = 235;
+    pub const SYS_NANOSLEEP: usize = 101;
+    pub const SYS_GETPID: usize = 172;
+    pub const SYS_SOCKET: usize = 198;
+    pub const SYS_CONNECT: usize = 203;
+    pub const SYS_ACCEPT: usize = 202;
+    pub const SYS_SENDTO: usize = 206;
+    pub const SYS_RECVFROM: usize = 207;
+    pub const SYS_SENDMSG: usize = 211;
+    pub const SYS_RECVMSG: usize = 212;
+    pub const SYS_SHUTDOWN: usize = 205;
+    pub const SYS_BIND: usize = 200;
+    pub const SYS_LISTEN: usize = 201;
+    pub const SYS_GETSOCKNAME: usize = 204;
+    pub const SYS_GETPEERNAME: usize = 208;
+    pub const SYS_SOCKETPAIR: usize = 199;
+    pub const SYS_SETSOCKOPT: usize = 209;
+    pub const SYS_GETSOCKOPT: usize = 210;
+    pub const SYS_CLONE: usize = 220;
+    pub const SYS_FORK: usize = 1739;
+    pub const SYS_VFORK: usize = 190;
+    pub const SYS_EXECVE: usize = 221;
+    pub const SYS_EXIT: usize = 93;
+    pub const SYS_WAIT4: usize = 61;
+    pub const SYS_KILL: usize = 129;
+    pub const SYS_UNAME: usize = 160;
+
+    // Rustux-specific system calls
+    pub const SYS_RUSTUX_DEBUG_PRINT: usize = 1000;
+    pub const SYS_RUSTUX_THREAD_CREATE: usize = 1001;
+    pub const SYS_RUSTUX_THREAD_EXIT: usize = 1002;
+    pub const SYS_RUSTUX_THREAD_YIELD: usize = 1003;
+}
+
+/// System call return values
+pub mod syscall_ret {
+    pub const OK: i64 = 0;
+    pub const ENOSYS: i64 = -38;  // Function not implemented
+    pub const EINVAL: i64 = -22;  // Invalid argument
+    pub const EPERM: i64 = -1;    // Operation not permitted
+    pub const EFAULT: i64 = -14;  // Bad address
+    pub const ENOMEM: i64 = -12;  // Out of memory
+    pub const EAGAIN: i64 = -11;  // Try again
+}
 
 /// RISC-V interrupt frame
 ///
@@ -199,25 +280,120 @@ fn riscv_external_interrupt_handler(_iframe: &mut RiscvIframe) {
     println!("External interrupt received");
 }
 
+/// Dispatch a system call to its handler
+///
+/// # Arguments
+///
+/// * `nr` - System call number
+/// * `a0`-`a5` - System call arguments
+///
+/// # Returns
+///
+/// The system call return value (negative for errors)
+fn dispatch_syscall(
+    nr: usize,
+    a0: u64,
+    a1: u64,
+    a2: u64,
+    a3: u64,
+    _a4: u64,
+    _a5: u64,
+) -> i64 {
+    match nr {
+        // Basic I/O
+        syscall_nr::SYS_READ => sys_read(a0, a1, a2),
+        syscall_nr::SYS_WRITE => sys_write(a0, a1, a2),
+
+        // Process management
+        syscall_nr::SYS_EXIT => sys_exit(a0 as i32),
+        syscall_nr::SYS_GETPID => sys_getpid(),
+
+        // Thread management (Rustux-specific)
+        syscall_nr::SYS_RUSTUX_THREAD_YIELD => sys_thread_yield(),
+
+        // Debug output (Rustux-specific)
+        syscall_nr::SYS_RUSTUX_DEBUG_PRINT => sys_debug_print(a0, a1),
+
+        // TODO: Implement more system calls
+        _ => {
+            // Unimplemented system call
+            syscall_ret::ENOSYS
+        }
+    }
+}
+
+// ============================================================================
+// System Call Implementations
+// ============================================================================
+
+/// Read from a file descriptor
+fn sys_read(_fd: u64, _buf: u64, _count: u64) -> i64 {
+    // TODO: Implement proper file I/O
+    syscall_ret::ENOSYS
+}
+
+/// Write to a file descriptor
+fn sys_write(fd: u64, _buf: u64, count: u64) -> i64 {
+    // fd 1 is stdout, fd 2 is stderr
+    if fd == 1 || fd == 2 {
+        // TODO: Validate user pointer and copy data
+        // For now, just return the count as if we wrote it
+        return count as i64;
+    }
+
+    syscall_ret::EINVAL
+}
+
+/// Exit the current process
+fn sys_exit(_code: i32) -> ! {
+    // TODO: Implement proper process exit
+    // For now, just halt
+    loop {
+        unsafe { core::arch::asm!("wfi") };
+    }
+}
+
+/// Get process ID
+fn sys_getpid() -> i64 {
+    // TODO: Implement proper process management
+    // For now, return 1 (init process)
+    1
+}
+
+/// Yield the current thread
+fn sys_thread_yield() -> i64 {
+    // TODO: Implement proper thread yielding
+    syscall_ret::OK
+}
+
+/// Debug print (Rustux-specific)
+///
+/// Prints a null-terminated string from user space
+fn sys_debug_print(_str: u64, _len: u64) -> i64 {
+    // TODO: Validate user pointer and safely read string
+    // For now, return success
+    syscall_ret::OK
+}
+
 /// Environment call from user mode (syscall)
 fn riscv_syscall_handler(iframe: &mut RiscvIframe) {
     // Syscall number is in a7
     // Arguments are in a0-a6
     // Return value goes in a0
 
-    let syscall_num = iframe.a7 as u64;
-    let _arg0 = iframe.a0;
-    let _arg1 = iframe.a1;
-    let _arg2 = iframe.a2;
-    let _arg3 = iframe.a3;
-    let _arg4 = iframe.a4;
-    let _arg5 = iframe.a5;
-    let _arg6 = iframe.a6;
+    let syscall_num = iframe.a7 as usize;
+    let arg0 = iframe.a0;
+    let arg1 = iframe.a1;
+    let arg2 = iframe.a2;
+    let arg3 = iframe.a3;
+    let arg4 = iframe.a4;
+    let arg5 = iframe.a5;
 
-    // TODO: Dispatch to syscall table
-    // For now, just return an error
-    println!("Syscall {} (unimplemented)", syscall_num);
-    iframe.a0 = (-1i64) as u64; // Error
+    // Dispatch the system call
+    let result = dispatch_syscall(syscall_num, arg0, arg1, arg2, arg3, arg4, arg5);
+
+    // Return value goes in a0
+    iframe.a0 = result as u64;
 }
 
 /// Main exception dispatch handler

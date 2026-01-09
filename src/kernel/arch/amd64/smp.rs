@@ -228,35 +228,65 @@ unsafe fn cleanup_bootstrap_threads(bootstrap_data: *mut BootstrapData, count: u
 
 /// Allocate a thread structure
 unsafe fn allocate_thread() -> *mut Thread {
-    // TODO: Implement proper thread allocation
-    // For now, use calloc equivalent
-    extern "C" {
-        fn calloc(size: usize, count: usize) -> *mut core::ffi::c_void;
+    use alloc::alloc::{alloc_zeroed, Layout};
+
+    // Create a layout for the Thread structure
+    let layout = Layout::new::<Thread>();
+    if layout.size() == 0 {
+        return core::ptr::null_mut();
     }
 
-    calloc(1, core::mem::size_of::<Thread>()) as *mut Thread
+    let ptr = alloc_zeroed(layout);
+    if ptr.is_null() {
+        return core::ptr::null_mut();
+    }
+
+    ptr as *mut Thread
 }
 
 /// Allocate a kernel stack for a thread
 unsafe fn vm_allocate_kstack(thread: *mut Thread) -> *mut u8 {
-    // TODO: Implement kernel stack allocation
-    // For now, return a placeholder
-    0 as *mut u8
+    use alloc::alloc::{alloc, Layout};
+
+    // Kernel stack size (8 pages = 32KB for kernel stack)
+    const KERNEL_STACK_SIZE: usize = 8 * 4096;
+
+    // Allocate kernel stack with proper alignment
+    let layout = Layout::from_size_align(KERNEL_STACK_SIZE, 16).unwrap();
+    let stack_ptr = alloc(layout);
+
+    if stack_ptr.is_null() {
+        return 0 as *mut u8;
+    }
+
+    // Store stack pointer in thread if thread is valid
+    if !thread.is_null() {
+        // TODO: Store stack information in thread structure
+        // (*thread).stack_base = stack_ptr;
+        // (*thread).stack_size = KERNEL_STACK_SIZE;
+    }
+
+    // Return the top of the stack (stacks grow downward)
+    stack_ptr.add(KERNEL_STACK_SIZE) as *mut u8
 }
 
 /// Free a thread and its kernel stack
 unsafe fn free_thread_and_stack(thread: *mut Thread) {
+    use alloc::alloc::{dealloc, Layout};
+
     if thread.is_null() {
         return;
     }
 
-    // TODO: Free kernel stack
-    extern "C" {
-        fn free(ptr: *mut core::ffi::c_void);
-    }
+    // TODO: Free kernel stack if we stored it in the thread
+    // if !(*thread).stack_base.is_null() {
+    //     let layout = Layout::from_size_align((*thread).stack_size, 16).unwrap();
+    //     dealloc((*thread).stack_base as *mut u8, layout);
+    // }
 
     // Free the thread structure
-    free(thread as *mut _);
+    let layout = Layout::new::<Thread>();
+    dealloc(thread as *mut u8, layout);
 }
 
 /// Sleep for the specified number of milliseconds
@@ -339,7 +369,20 @@ pub fn amd64_mp_reschedule(target_mask: u64) {
 ///
 /// * `idle` - Whether the CPU should enter idle state
 pub fn amd64_prepare_cpu_idle(idle: bool) {
-    // TODO: Implement proper CPU idle preparation
-    // For now, this is a stub
-    let _ = idle;
+    if idle {
+        unsafe {
+            // Enable interrupts before halting
+            core::arch::asm!("sti");
+
+            // Halt the CPU until an interrupt arrives
+            // This is the proper idle state for x86-64 CPUs
+            core::arch::asm!("hlt");
+        }
+    } else {
+        // CPU is leaving idle state
+        // Disable interrupts if needed
+        unsafe {
+            core::arch::asm!("cli");
+        }
+    }
 }

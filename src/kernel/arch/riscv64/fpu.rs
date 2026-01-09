@@ -334,3 +334,10 @@ pub fn riscv_fpu_clear_exceptions() {
 
 /// Assert that FpuState is the correct size
 const _: () = assert!(core::mem::size_of::<FpuState>() == 264);
+
+/// Early FPU initialization (called during boot)
+///
+/// This is called during early boot to enable FPU access
+pub fn riscv_fpu_early_init() {
+    riscv_fpu_init();
+}

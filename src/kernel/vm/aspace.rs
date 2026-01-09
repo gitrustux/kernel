@@ -230,7 +230,8 @@ impl AddressSpace {
             return Err(VmError::InvalidAddress);
         }
 
-        if base + size < base {
+        // Check for overflow using checked_add
+        if base.checked_add(size).is_none() {
             return Err(VmError::InvalidArgs); // Overflow
         }
 

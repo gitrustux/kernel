@@ -213,7 +213,38 @@ pub fn gdt_setup() {
 
 /// Setup the IDT (Interrupt Descriptor Table)
 pub fn idt_setup_readonly() {
-    // TODO: Implement IDT setup
+    unsafe {
+        // External reference to the ISR table defined in exceptions.S
+        extern "C" {
+            #[link_name = "_isr_table"]
+            static ISR_TABLE: [*const (); 256];
+        }
+
+        // Code segment selector for kernel (index 1 * 8 = 8, for ring 0)
+        const KERNEL_CS: u16 = GDT_KERNEL_CODE as u16 * 8;
+
+        // Populate IDT entries
+        for i in 0..IDT_ENTRIES {
+            let isr_ptr = ISR_TABLE[i] as u64;
+
+            IDT[i] = IdtEntry {
+                offset_low: (isr_ptr & 0xFFFF) as u16,
+                selector: KERNEL_CS,
+                ist: 0,  // IST0 (no special stack)
+                type_attr: IDT_INTERRUPT_GATE,
+                offset_mid: ((isr_ptr >> 16) & 0xFFFF) as u16,
+                offset_high: ((isr_ptr >> 32) & 0xFFFFFFFF) as u32,
+                reserved: 0,
+            };
+        }
+
+        // Setup IDT pointer
+        IDT_POINTER.limit = ((core::mem::size_of::<IdtEntry>() * IDT_ENTRIES) - 1) as u16;
+        IDT_POINTER.base = &IDT as *const IdtEntry as u64;
+
+        // Load IDT
+        idt_load(&IDT_POINTER);
+    }
 }
 
 /// Extract the Requested Privilege Level (RPL) from a selector
