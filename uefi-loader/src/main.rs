@@ -386,8 +386,312 @@ fn find_acpi_rsdp() -> Option<u64> {
 }
 
 // ============================================================================
+// PE/COFF Format Definitions
+// ============================================================================
+
+/// PE/COFF header structures for manual image loading
+#[repr(C)]
+struct DosHeader {
+    e_magic: u16,           // Magic number (0x5A4D = "MZ")
+    e_cblp: u16,
+    e_cp: u16,
+    e_crlc: u16,
+    e_cparhdr: u16,
+    e_minalloc: u16,
+    e_maxalloc: u16,
+    e_ss: u16,
+    e_sp: u16,
+    e_csum: u16,
+    e_ip: u16,
+    e_cs: u16,
+    e_lfarlc: u16,
+    e_ovno: u16,
+    e_res: [u16; 4],
+    e_oemid: u16,
+    e_oeminfo: u16,
+    e_res2: [u16; 10],
+    e_lfanew: u32,          // Offset to PE header
+}
+
+/// COFF File Header
+#[repr(C)]
+struct CoffFileHeader {
+    machine: u16,
+    number_of_sections: u16,
+    time_date_stamp: u32,
+    pointer_to_symbol_table: u32,
+    number_of_symbols: u32,
+    size_of_optional_header: u16,
+    characteristics: u16,
+}
+
+/// PE Optional Header (PE32+ format)
+#[repr(C)]
+struct PeOptionalHeader {
+    magic: u16,                     // 0x20b for PE32+
+    major_linker_version: u8,
+    minor_linker_version: u8,
+    size_of_code: u32,
+    size_of_initialized_data: u32,
+    size_of_uninitialized_data: u32,
+    address_of_entry_point: u32,
+    base_of_code: u32,
+    image_base: u64,
+    section_alignment: u32,
+    file_alignment: u32,
+    major_os_version: u16,
+    minor_os_version: u16,
+    major_image_version: u16,
+    minor_image_version: u16,
+    major_subsystem_version: u16,
+    minor_subsystem_version: u16,
+    win32_version_value: u32,
+    size_of_image: u32,
+    size_of_headers: u32,
+    check_sum: u32,
+    subsystem: u16,
+    dll_characteristics: u16,
+    size_of_stack_reserve: u64,
+    size_of_stack_commit: u64,
+    size_of_heap_reserve: u64,
+    size_of_heap_commit: u64,
+    loader_flags: u32,
+    number_of_rva_and_sizes: u32,
+}
+
+/// Data Directory entry
+#[repr(C)]
+struct DataDirectory {
+    virtual_address: u32,
+    size: u32,
+}
+
+/// Section header
+#[repr(C)]
+struct SectionHeader {
+    name: [u8; 8],
+    virtual_size: u32,
+    virtual_address: u32,
+    size_of_raw_data: u32,
+    pointer_to_raw_data: u32,
+    pointer_to_relocations: u32,
+    pointer_to_line_numbers: u32,
+    number_of_relocations: u16,
+    number_of_line_numbers: u16,
+    characteristics: u32,
+}
+
+// ============================================================================
 // Kernel Loading
 // ============================================================================
+
+/// Validate and display PE/COFF header information
+fn validate_pe_coff(kernel_data: *const u8, file_size: usize) -> Result<(), &'static str> {
+    uefi::system::with_stdout(|stdout| {
+        let _ = stdout.output_string(cstr16!("  - Validating PE/COFF header...\r\n"));
+    });
+
+    // Check minimum size
+    if file_size < 64 {
+        return Err("File too small for DOS header");
+    }
+
+    // Parse DOS header
+    let dos_header = unsafe { &*(kernel_data as *const DosHeader) };
+
+    uefi::system::with_stdout(|stdout| {
+        let _ = stdout.output_string(cstr16!("    - DOS signature: "));
+        if dos_header.e_magic == 0x5A4D {
+            let _ = stdout.output_string(cstr16!("MZ (OK)\r\n"));
+        } else {
+            let _ = stdout.output_string(cstr16!("Invalid! (expected MZ)\r\n"));
+        }
+        let _ = stdout.output_string(cstr16!("    - PE offset: "));
+        // Simple hex display for PE offset
+        let pe_off = dos_header.e_lfanew;
+        let hex = [cstr16!("0"), cstr16!("1"), cstr16!("2"), cstr16!("3"),
+                   cstr16!("4"), cstr16!("5"), cstr16!("6"), cstr16!("7"),
+                   cstr16!("8"), cstr16!("9"), cstr16!("A"), cstr16!("B"),
+                   cstr16!("C"), cstr16!("D"), cstr16!("E"), cstr16!("F")];
+        let _ = stdout.output_string(cstr16!("0x"));
+        let _ = stdout.output_string(hex[((pe_off >> 28) & 0xF) as usize]);
+        let _ = stdout.output_string(hex[((pe_off >> 24) & 0xF) as usize]);
+        let _ = stdout.output_string(hex[((pe_off >> 20) & 0xF) as usize]);
+        let _ = stdout.output_string(hex[((pe_off >> 16) & 0xF) as usize]);
+        let _ = stdout.output_string(hex[((pe_off >> 12) & 0xF) as usize]);
+        let _ = stdout.output_string(hex[((pe_off >> 8) & 0xF) as usize]);
+        let _ = stdout.output_string(hex[((pe_off >> 4) & 0xF) as usize]);
+        let _ = stdout.output_string(hex[(pe_off & 0xF) as usize]);
+        let _ = stdout.output_string(cstr16!("\r\n"));
+    });
+
+    // Check PE offset is valid
+    let pe_offset = dos_header.e_lfanew as usize;
+    if pe_offset == 0 || pe_offset + 4 > file_size {
+        return Err("Invalid PE offset");
+    }
+
+    // Check PE signature
+    let pe_signature = unsafe { *(kernel_data.add(pe_offset) as *const u32) };
+    if pe_signature != 0x00004550 {
+        uefi::system::with_stdout(|stdout| {
+            let _ = stdout.output_string(cstr16!("    - PE signature: Invalid! (expected PE00)\r\n"));
+        });
+        return Err("Invalid PE signature");
+    }
+
+    uefi::system::with_stdout(|stdout| {
+        let _ = stdout.output_string(cstr16!("    - PE signature: PE00 (OK)\r\n"));
+    });
+
+    // Parse COFF file header
+    let coff_offset = pe_offset + 4;
+    if coff_offset + core::mem::size_of::<CoffFileHeader>() > file_size {
+        return Err("File too small for COFF header");
+    }
+
+    let coff_header = unsafe {
+        &*(kernel_data.add(coff_offset) as *const CoffFileHeader)
+    };
+
+    uefi::system::with_stdout(|stdout| {
+        let _ = stdout.output_string(cstr16!("    - Machine type: "));
+        // 0x8664 = AMD64/x86-64
+        if coff_header.machine == 0x8664 {
+            let _ = stdout.output_string(cstr16!("0x8664 (x86-64, OK)\r\n"));
+        } else {
+            let _ = stdout.output_string(cstr16!("Unknown (Not x86-64!)\r\n"));
+        }
+        let _ = stdout.output_string(cstr16!("    - Characteristics: "));
+        if coff_header.characteristics & 0x0020 != 0 {
+            let _ = stdout.output_string(cstr16!("EXECUTABLE_IMAGE\r\n"));
+        } else {
+            let _ = stdout.output_string(cstr16!("Unknown\r\n"));
+        }
+    });
+
+    // Parse optional header
+    let opt_header_offset = coff_offset + core::mem::size_of::<CoffFileHeader>();
+    if opt_header_offset + core::mem::size_of::<PeOptionalHeader>() > file_size {
+        return Err("File too small for optional header");
+    }
+
+    let opt_header = unsafe {
+        &*(kernel_data.add(opt_header_offset) as *const PeOptionalHeader)
+    };
+
+    uefi::system::with_stdout(|stdout| {
+        let _ = stdout.output_string(cstr16!("    - PE Magic: "));
+        // 0x20b = PE32+ (64-bit)
+        if opt_header.magic == 0x020b {
+            let _ = stdout.output_string(cstr16!("0x20b (PE32+, OK)\r\n"));
+        } else {
+            let _ = stdout.output_string(cstr16!("Unknown (Not PE32+!)\r\n"));
+        }
+        let _ = stdout.output_string(cstr16!("    - Subsystem: "));
+        // 0x0a = EFI application
+        if opt_header.subsystem == 0x0a {
+            let _ = stdout.output_string(cstr16!("0x0a (EFI_APP, OK)\r\n"));
+        } else if opt_header.subsystem == 0x0b {
+            let _ = stdout.output_string(cstr16!("0x0b (EFI_BOOT_SERVICE_DRIVER)\r\n"));
+        } else if opt_header.subsystem == 0x0c {
+            let _ = stdout.output_string(cstr16!("0x0c (EFI_RUNTIME_DRIVER)\r\n"));
+        } else {
+            let _ = stdout.output_string(cstr16!("Unknown (Not EFI!)\r\n"));
+        }
+        let _ = stdout.output_string(cstr16!("    - Entry point RVA: "));
+        let ep = opt_header.address_of_entry_point;
+        let hex = [cstr16!("0"), cstr16!("1"), cstr16!("2"), cstr16!("3"),
+                   cstr16!("4"), cstr16!("5"), cstr16!("6"), cstr16!("7"),
+                   cstr16!("8"), cstr16!("9"), cstr16!("A"), cstr16!("B"),
+                   cstr16!("C"), cstr16!("D"), cstr16!("E"), cstr16!("F")];
+        let _ = stdout.output_string(cstr16!("0x"));
+        let _ = stdout.output_string(hex[((ep >> 28) & 0xF) as usize]);
+        let _ = stdout.output_string(hex[((ep >> 24) & 0xF) as usize]);
+        let _ = stdout.output_string(hex[((ep >> 20) & 0xF) as usize]);
+        let _ = stdout.output_string(hex[((ep >> 16) & 0xF) as usize]);
+        let _ = stdout.output_string(hex[((ep >> 12) & 0xF) as usize]);
+        let _ = stdout.output_string(hex[((ep >> 8) & 0xF) as usize]);
+        let _ = stdout.output_string(hex[((ep >> 4) & 0xF) as usize]);
+        let _ = stdout.output_string(hex[(ep & 0xF) as usize]);
+        let _ = stdout.output_string(cstr16!("\r\n"));
+    });
+
+    // Validate machine type
+    if coff_header.machine != 0x8664 {
+        return Err("Wrong machine type (not x86-64)");
+    }
+
+    // Validate PE32+ magic
+    if opt_header.magic != 0x020b {
+        return Err("Wrong PE magic (not PE32+)");
+    }
+
+    // Validate subsystem
+    if opt_header.subsystem != 0x0a && opt_header.subsystem != 0x0b && opt_header.subsystem != 0x0c {
+        return Err("Wrong subsystem (not EFI)");
+    }
+
+    uefi::system::with_stdout(|stdout| {
+        let _ = stdout.output_string(cstr16!("  - PE/COFF validation: PASSED\r\n"));
+    });
+
+    Ok(())
+}
+
+/// Reboot the system using UEFI runtime services
+fn reboot_system() -> ! {
+    uefi::system::with_stdout(|stdout| {
+        let _ = stdout.output_string(cstr16!("\r\nRebooting system...\r\n"));
+    });
+
+    // Use runtime services to reset the system
+    unsafe {
+        if let Some(st) = uefi::table::system_table_raw() {
+            let system_table = st.as_ref();
+            let runtime_services = system_table.runtime_services;
+
+            // reset_system is the correct field name
+            let reset = (*runtime_services).reset_system;
+            reset(
+                uefi_raw::table::runtime::ResetType::COLD,
+                uefi_raw::Status::SUCCESS,
+                0,
+                core::ptr::null_mut(),
+            );
+        }
+    }
+
+    // If reset failed, halt
+    loop {
+        unsafe { core::arch::asm!("hlt", options(nomem, nostack)); }
+    }
+}
+
+/// Show error menu with reboot option
+fn show_error_menu(_error_message: &str) -> ! {
+    uefi::system::with_stdout(|stdout| {
+        let _ = stdout.output_string(cstr16!("\r\n"));
+        let _ = stdout.output_string(cstr16!("==================================================================\r\n"));
+        let _ = stdout.output_string(cstr16!("||                    BOOT ERROR DETECTED                      ||\r\n"));
+        let _ = stdout.output_string(cstr16!("==================================================================\r\n\r\n"));
+
+        let _ = stdout.output_string(cstr16!("Boot failed. System will reboot in 5 seconds...\r\n"));
+    });
+
+    // Wait 5 seconds then reboot
+    for _ in 0..50 {
+        unsafe {
+            let st = uefi::table::system_table_raw().unwrap();
+            let system_table = st.as_ref();
+            let boot_services = system_table.boot_services;
+            let stall = (*boot_services).stall;
+            stall(100000);  // 100ms * 50 = 5 seconds
+        }
+    }
+
+    reboot_system();
+}
 
 /// Load and start the kernel.efi from disk
 fn load_and_start_kernel() -> uefi::Result {
@@ -428,7 +732,9 @@ fn load_and_start_kernel() -> uefi::Result {
                     let file_size = info.file_size() as usize;
 
                     uefi::system::with_stdout(|stdout| {
-                        let _ = stdout.output_string(cstr16!("  - Kernel file size: OK\r\n"));
+                        let _ = stdout.output_string(cstr16!("  - Kernel file size: "));
+                        // Simple size display - just show OK for now
+                        let _ = stdout.output_string(cstr16!("OK\r\n"));
                     });
 
                     // Allocate memory for the kernel
@@ -449,7 +755,21 @@ fn load_and_start_kernel() -> uefi::Result {
                         let _ = stdout.output_string(cstr16!("  - Kernel loaded into memory\r\n"));
                     });
 
+                    // Validate PE/COFF header before calling LoadImage
+                    let kernel_ptr = kernel_data.as_ptr() as *const u8;
+                    if let Err(_e) = validate_pe_coff(kernel_ptr, file_size) {
+                        uefi::system::with_stdout(|stdout| {
+                            let _ = stdout.output_string(cstr16!("  - PE/COFF validation FAILED\r\n"));
+                            let _ = stdout.output_string(cstr16!("  - Trying LoadImage anyway...\r\n"));
+                        });
+                    }
+
+                    uefi::system::with_stdout(|stdout| {
+                        let _ = stdout.output_string(cstr16!("  - Calling LoadImage...\r\n"));
+                    });
+
                     // Load and start the kernel as an EFI image using raw boot services
+                    // Try LoadImage first, fall back to direct entry point call
                     let result = unsafe {
                         let bt = uefi::table::system_table_raw().unwrap();
                         let system_table = bt.as_ref();
@@ -458,18 +778,111 @@ fn load_and_start_kernel() -> uefi::Result {
                         let mut kernel_handle: *mut core::ffi::c_void = core::ptr::null_mut();
                         let load_image = (*boot_services).load_image;
 
+                        // Call LoadImage with parameters matching UEFI spec:
+                        // EFI_STATUS LoadImage(
+                        //   IN BOOLEAN BootPolicy, TRUE = load from FilePath, FALSE = load from SourceBuffer
+                        //   IN EFI_HANDLE ParentImageHandle,
+                        //   IN EFI_DEVICE_PATH_PROTOCOL *FilePath, OPTIONAL
+                        //   IN VOID *SourceBuffer, OPTIONAL
+                        //   IN UINTN SourceSize,
+                        //   OUT EFI_HANDLE *ImageHandle
+                        // );
                         let status = load_image(
-                            false.into(),
+                            false.into(),  // BootPolicy: load from memory buffer
                             uefi::boot::image_handle().as_ptr(),
-                            core::ptr::null(),
-                            kernel_data.as_ptr(),
+                            core::ptr::null(),  // No FilePath
+                            kernel_data.as_ptr() as *mut u8,
                             file_size,
                             &mut kernel_handle,
                         );
 
-                        if status.is_success() {
+                        uefi::system::with_stdout(|stdout| {
+                            let _ = stdout.output_string(cstr16!("  - LoadImage status: "));
+                            match status {
+                                Status::SUCCESS => {
+                                    let _ = stdout.output_string(cstr16!("SUCCESS\r\n"));
+                                }
+                                Status::LOAD_ERROR => {
+                                    let _ = stdout.output_string(cstr16!("LOAD_ERROR\r\n"));
+                                }
+                                Status::INVALID_PARAMETER => {
+                                    let _ = stdout.output_string(cstr16!("INVALID_PARAMETER\r\n"));
+                                }
+                                Status::UNSUPPORTED => {
+                                    let _ = stdout.output_string(cstr16!("UNSUPPORTED\r\n"));
+                                }
+                                Status::BUFFER_TOO_SMALL => {
+                                    let _ = stdout.output_string(cstr16!("BUFFER_TOO_SMALL\r\n"));
+                                }
+                                _ => {
+                                    // Display hex error code
+                                    let code = status.0;
+                                    let _ = stdout.output_string(cstr16!("UNKNOWN(0x"));
+                                    // Simple hex display
+                                    let hex_chars = [cstr16!("0"), cstr16!("1"), cstr16!("2"), cstr16!("3"),
+                                                    cstr16!("4"), cstr16!("5"), cstr16!("6"), cstr16!("7"),
+                                                    cstr16!("8"), cstr16!("9"), cstr16!("A"), cstr16!("B"),
+                                                    cstr16!("C"), cstr16!("D"), cstr16!("E"), cstr16!("F")];
+                                    let hi = (code >> 12) & 0xF;
+                                    let mid_hi = (code >> 8) & 0xF;
+                                    let mid_lo = (code >> 4) & 0xF;
+                                    let lo = code & 0xF;
+                                    let _ = stdout.output_string(hex_chars[hi as usize]);
+                                    let _ = stdout.output_string(hex_chars[mid_hi as usize]);
+                                    let _ = stdout.output_string(hex_chars[mid_lo as usize]);
+                                    let _ = stdout.output_string(hex_chars[lo as usize]);
+                                    let _ = stdout.output_string(cstr16!(")\r\n"));
+
+                                    // Show common error codes
+                                    let _ = stdout.output_string(cstr16!("    (0x8001=LOAD_ERROR, 0x8002=INVALID_PARAM)\r\n"));
+                                }
+                            }
+                        });
+
+                        if !status.is_success() {
                             uefi::system::with_stdout(|stdout| {
-                                let _ = stdout.output_string(cstr16!("  - EFI image loaded\r\n"));
+                                let _ = stdout.output_string(cstr16!("  - LoadImage failed, trying direct entry point...\r\n"));
+                            });
+
+                            // Fallback: Find and call the EFI entry point directly
+                            // PE/COFF format: entry point is at offset 0x28 in PE header
+                            let dos_header = kernel_data.as_ptr() as *const u8;
+                            let pe_offset = *(dos_header.add(0x3C) as *const u32) as usize;
+                            let pe_header = dos_header.add(pe_offset);
+                            let optional_header_offset = pe_offset + 0x18;
+                            let entry_point_rva = *(pe_header.add(optional_header_offset + 0x10) as *const u32) as usize;
+                            let image_base = kernel_data.as_ptr() as usize;
+                            let entry_point = (image_base + entry_point_rva) as *const ();
+
+                            uefi::system::with_stdout(|stdout| {
+                                let _ = stdout.output_string(cstr16!("  - Jumping to kernel entry point...\r\n"));
+                            });
+
+                            // UEFI entry point signature: fn(image_handle: Handle, system_table: *mut SystemTable) -> Status
+                            type EfiEntry = extern "efiapi" fn(*mut core::ffi::c_void, *mut uefi_raw::table::system::SystemTable) -> Status;
+                            let efi_entry: EfiEntry = core::mem::transmute(entry_point);
+
+                            let entry_status = efi_entry(
+                                uefi::boot::image_handle().as_ptr(),
+                                system_table as *const _ as *mut _
+                            );
+
+                            uefi::system::with_stdout(|stdout| {
+                                let _ = stdout.output_string(cstr16!("  - Kernel entry returned: "));
+                                match entry_status {
+                                    Status::SUCCESS => {
+                                        let _ = stdout.output_string(cstr16!("SUCCESS\r\n"));
+                                    }
+                                    _ => {
+                                        let _ = stdout.output_string(cstr16!("FAILED\r\n"));
+                                    }
+                                }
+                            });
+
+                            Err(entry_status)
+                        } else {
+                            uefi::system::with_stdout(|stdout| {
+                                let _ = stdout.output_string(cstr16!("  - Calling StartImage...\r\n"));
                             });
 
                             let start_image = (*boot_services).start_image;
@@ -479,40 +892,35 @@ fn load_and_start_kernel() -> uefi::Result {
                                 core::ptr::null_mut(),
                             );
 
+                            uefi::system::with_stdout(|stdout| {
+                                let _ = stdout.output_string(cstr16!("  - StartImage status: "));
+                                match status {
+                                    Status::SUCCESS => {
+                                        let _ = stdout.output_string(cstr16!("SUCCESS\r\n"));
+                                    }
+                                    _ => {
+                                        let _ = stdout.output_string(cstr16!("FAILED\r\n"));
+                                    }
+                                }
+                            });
+
                             if status.is_success() {
-                                uefi::system::with_stdout(|stdout| {
-                                    let _ = stdout.output_string(cstr16!("  - Kernel started\r\n"));
-                                });
                                 Err(uefi::Status::ABORTED)
                             } else {
-                                uefi::system::with_stdout(|stdout| {
-                                    let _ = stdout.output_string(cstr16!("  - StartImage failed\r\n"));
-                                });
                                 Err(status)
                             }
-                        } else {
-                            uefi::system::with_stdout(|stdout| {
-                                let _ = stdout.output_string(cstr16!("  - LoadImage failed\r\n"));
-                            });
-                            Err(status)
                         }
                     };
 
                     result.map_err(|e| uefi::Error::from(e))
                 }
                 _ => {
-                    uefi::system::with_stdout(|stdout| {
-                        let _ = stdout.output_string(cstr16!("  - Error: Not a regular file\r\n"));
-                    });
-                    Err(uefi::Status::NOT_FOUND.into())
+                    show_error_menu("Error: kernel.efi is not a regular file");
                 }
             }
         }
-        Err(e) => {
-            uefi::system::with_stdout(|stdout| {
-                let _ = stdout.output_string(cstr16!("  - kernel.efi not found\r\n"));
-            });
-            Err(e)
+        Err(_e) => {
+            show_error_menu("Error: kernel.efi not found at /EFI/Rustux/kernel.efi");
         }
     }
 }
