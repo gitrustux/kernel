@@ -22,8 +22,17 @@ fn panic(_info: &core::panic::PanicInfo) -> ! {
 #[repr(u8)]
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum BootMode {
-    LiveUsb = 1,
-    Install = 2,
+    Desktop = 1,      // GUI Desktop mode
+    Install = 2,      // Install to disk
+    CommandLine = 3,  // CLI only
+}
+
+/// Installation mode
+#[repr(u8)]
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum InstallMode {
+    Desktop = 1,
+    Server = 2,
 }
 
 /// UEFI entry point for the kernel
@@ -37,6 +46,13 @@ fn main() -> Status {
 
     // Show boot menu and get user selection
     let boot_mode = show_boot_menu();
+
+    // If Install mode, show install type selection
+    let install_mode = if boot_mode == BootMode::Install {
+        Some(show_install_menu())
+    } else {
+        None
+    };
 
     uefi::system::with_stdout(|stdout| {
         let _ = stdout.set_color(uefi::proto::console::text::Color::White,
@@ -67,31 +83,54 @@ The kernel is now running as a native UEFI application.\r\n\
         let _ = stdout.set_color(uefi::proto::console::text::Color::Yellow,
                                  uefi::proto::console::text::Color::Blue);
         match boot_mode {
-            BootMode::LiveUsb => {
+            BootMode::Desktop => {
                 let _ = stdout.output_string(cstr16!("\r\n\
-Boot Mode: LIVE USB (with persistence)\r\n\
-  - OS running from RAM\r\n\
-  - Changes saved to USB storage\r\n\
+Boot Mode: DESKTOP (GUI)\r\n\
+  - Loading Rustica OS Desktop Environment\r\n\
+  - Full graphical interface\r\n\
+  - Window management and applications\r\n\
 \r\n\
-Initializing system...\r\n\
+Initializing GUI system...\r\n\
 "));
             }
             BootMode::Install => {
                 let _ = stdout.output_string(cstr16!("\r\n\
-Boot Mode: INSTALLATION MODE\r\n\
-  - Preparing for installation to target device\r\n\
-\r\n\
+Boot Mode: INSTALLATION\r\n\
+  - Installing Rustux OS to target device\r\n\
+"));
+                match install_mode {
+                    Some(InstallMode::Desktop) => {
+                        let _ = stdout.output_string(cstr16!("  - Mode: DESKTOP (with GUI)\r\n\
+"));
+                    }
+                    Some(InstallMode::Server) => {
+                        let _ = stdout.output_string(cstr16!("  - Mode: SERVER (CLI only)\r\n\
+"));
+                    }
+                    None => {}
+                }
+                let _ = stdout.output_string(cstr16!("\r\n\
 NOTE: Installation system coming soon...\r\n\
-System will boot in Live USB mode for now.\r\n\
+System will boot in selected mode for now.\r\n\
 \r\n\
 Initializing system...\r\n\
+"));
+            }
+            BootMode::CommandLine => {
+                let _ = stdout.output_string(cstr16!("\r\n\
+Boot Mode: COMMAND LINE (CLI)\r\n\
+  - Loading Rustux OS Shell\r\n\
+  - Command-line interface only\r\n\
+  - Minimal resource usage\r\n\
+\r\n\
+Initializing shell...\r\n\
 "));
             }
         }
     });
 
     // Continue to OS initialization
-    // TODO: Transition to main OS loop
+    // TODO: Transition to main OS loop based on boot mode
     // For now, keep system running in a loop
     uefi::system::with_stdout(|stdout| {
         let _ = stdout.set_color(uefi::proto::console::text::Color::Green,
@@ -131,43 +170,55 @@ fn show_boot_menu() -> BootMode {
 \r\n\
 Select Boot Mode:\r\n\
 \r\n\
-  [1] Live USB (with persistence)\r\n\
-      - Run OS from RAM\r\n\
-      - Changes saved to USB storage\r\n\
+  [1] Desktop (GUI)\r\n\
+      - Load Rustica OS Desktop Environment\r\n\
+      - Full graphical interface with window management\r\n\
 \r\n\
   [2] Install to Disk\r\n\
       - Install Rustux OS to target device\r\n\
+      - Choose Desktop or Server mode\r\n\
+\r\n\
+  [3] Command Line (CLI)\r\n\
+      - Load Rustux OS Shell only\r\n\
+      - Minimal resource usage\r\n\
 \r\n\
 "));
     });
 
     // Countdown timer with default selection
-    let mut selection = BootMode::LiveUsb;
+    let mut selection = BootMode::Desktop;
 
     for countdown in (0..max_attempts).rev() {
         let seconds_left = (countdown as u64 * MENU_DELAY_MS) / 1000;
 
         uefi::system::with_stdout(|stdout| {
             // Update countdown display
-            let _ = stdout.set_cursor_position(0, 17);
+            let _ = stdout.set_cursor_position(0, 20);
             let _ = stdout.output_string(cstr16!("Booting in "));
             let _ = stdout.output_uint(seconds_left);
-            let _ = stdout.output_string(cstr16!(" seconds... [Press 1-2 to select]      "));
+            let _ = stdout.output_string(cstr16!(" seconds... [Press 1-3 to select]      "));
         });
 
-        // Check for key press
+        // Check for key press - use wait_for_key_event for better responsiveness
         let key_pressed = uefi::system::with_stdin(|stdin| {
             let _ = stdin.reset(false);
+
+            // Try to read a key with better event handling
             match stdin.read_key() {
                 Ok(Some(key)) => {
                     // Check if it's a printable key
                     match key {
                         uefi::proto::console::text::Key::Printable(c) => {
-                            if c == uefi::Char16::try_from('1').unwrap() {
-                                selection = BootMode::LiveUsb;
+                            // Convert Char16 to u32 for comparison
+                            let c_val = u16::from(c) as u32;
+                            if c_val == '1' as u32 {
+                                selection = BootMode::Desktop;
                                 true
-                            } else if c == uefi::Char16::try_from('2').unwrap() {
+                            } else if c_val == '2' as u32 {
                                 selection = BootMode::Install;
+                                true
+                            } else if c_val == '3' as u32 {
+                                selection = BootMode::CommandLine;
                                 true
                             } else {
                                 false
@@ -188,8 +239,99 @@ Select Boot Mode:\r\n\
     }
 
     uefi::system::with_stdout(|stdout| {
-        let _ = stdout.set_cursor_position(0, 17);
+        let _ = stdout.set_cursor_position(0, 20);
         let _ = stdout.output_string(cstr16!("                                                          "));
+    });
+
+    selection
+}
+
+/// Show install mode selection menu (Desktop or Server)
+fn show_install_menu() -> InstallMode {
+    const MENU_TIMEOUT_SECONDS: u64 = 30;  // 30 seconds for install mode selection
+    const MENU_DELAY_MS: u64 = 100;
+    let max_attempts = (MENU_TIMEOUT_SECONDS * 1000) / MENU_DELAY_MS;
+
+    uefi::system::with_stdout(|stdout| {
+        let _ = stdout.set_color(uefi::proto::console::text::Color::White,
+                                 uefi::proto::console::text::Color::Black);
+        let _ = stdout.clear();
+        let _ = stdout.enable_cursor(true);
+
+        // Display install mode menu
+        let _ = stdout.output_string(cstr16!(
+"\r\n\
+***************************************************************************\r\n\
+*                                                                         *\r\n\
+*                   INSTALLATION MODE SELECTION                           *\r\n\
+*                                                                         *\r\n\
+***************************************************************************\r\n\
+\r\n\
+Select installation type:\r\n\
+\r\n\
+  [1] Desktop Installation\r\n\
+      - Full GUI desktop environment\r\n\
+      - Graphical applications and tools\r\n\
+      - Recommended for most users\r\n\
+\r\n\
+  [2] Server Installation\r\n\
+      - Command-line interface only\r\n\
+      - Minimal resource usage\r\n\
+      - Optimized for servers and embedded systems\r\n\
+\r\n\
+"));
+    });
+
+    // Countdown timer with default selection
+    let mut selection = InstallMode::Desktop;
+
+    for countdown in (0..max_attempts).rev() {
+        let seconds_left = (countdown as u64 * MENU_DELAY_MS) / 1000;
+
+        uefi::system::with_stdout(|stdout| {
+            // Update countdown display
+            let _ = stdout.set_cursor_position(0, 20);
+            let _ = stdout.output_string(cstr16!("Selecting in "));
+            let _ = stdout.output_uint(seconds_left);
+            let _ = stdout.output_string(cstr16!(" seconds... [Press 1-2]       "));
+        });
+
+        // Check for key press
+        let key_pressed = uefi::system::with_stdin(|stdin| {
+            let _ = stdin.reset(false);
+
+            match stdin.read_key() {
+                Ok(Some(key)) => {
+                    match key {
+                        uefi::proto::console::text::Key::Printable(c) => {
+                            let c_val = u16::from(c) as u32;
+                            if c_val == '1' as u32 {
+                                selection = InstallMode::Desktop;
+                                true
+                            } else if c_val == '2' as u32 {
+                                selection = InstallMode::Server;
+                                true
+                            } else {
+                                false
+                            }
+                        }
+                        _ => false
+                    }
+                }
+                _ => false
+            }
+        });
+
+        if key_pressed {
+            break;
+        }
+
+        uefi::boot::stall(Duration::from_millis(MENU_DELAY_MS));
+    }
+
+    uefi::system::with_stdout(|stdout| {
+        let _ = stdout.set_cursor_position(0, 20);
+        let _ = stdout.output_string(cstr16!("                                         "));
     });
 
     selection
